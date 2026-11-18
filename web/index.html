@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetProof</title>
+<style>
+:root{
+  --bg:#f4f5f7; --card:#fff; --ink:#1b1f24; --mute:#626b76; --line:#dde1e6;
+  --accent:#2563eb; --accent-ink:#fff;
+  --good:#15803d; --good-bg:#dcfce7; --fair:#b45309; --fair-bg:#fef3c7; --poor:#b91c1c; --poor-bg:#fee2e2;
+  --chart:#2563eb; --chart2:#9333ea;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#111418; --card:#1a1e24; --ink:#e8eaed; --mute:#9aa3ad; --line:#2c323a;
+    --accent:#3b82f6; --good:#4ade80; --good-bg:#14301f; --fair:#fbbf24; --fair-bg:#3a2c0d; --poor:#f87171; --poor-bg:#3b1515;
+    --chart:#60a5fa; --chart2:#c084fc;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+h1{font-size:26px;margin:0;letter-spacing:-.02em}
+h1 span{color:var(--accent)}
+.me{color:var(--mute);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:14px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:0 0 12px;font-weight:600}
+.step{display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:12px;align-items:center;justify-content:center;margin-right:8px;vertical-align:1px}
+select,input{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%}
+button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:10px 18px;background:var(--accent);color:var(--accent-ink);cursor:pointer;white-space:nowrap}
+button.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:10px;align-items:center}
+.peer{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.peer:first-child{border-top:0}
+.peer .n{flex:1;min-width:0}
+.peer .n b{display:block;overflow:hidden;text-overflow:ellipsis}
+.peer .n small{color:var(--mute)}
+.tag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:99px;background:var(--bg);border:1px solid var(--line);color:var(--mute);margin-left:6px;vertical-align:1px}
+.hint{color:var(--mute);font-size:13px;margin:8px 0 0}
+.empty{color:var(--mute);padding:6px 0 14px}
+.banner{border-radius:12px;padding:14px 18px;margin-bottom:14px;background:var(--fair-bg);color:var(--ink);border:1px solid var(--line);display:flex;gap:12px;align-items:center;justify-content:space-between}
+.big{font-size:44px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.big small{font-size:18px;color:var(--mute);font-weight:500}
+.bar{height:8px;background:var(--bg);border-radius:99px;overflow:hidden;margin:12px 0}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .4s}
+.phases{display:flex;gap:6px;flex-wrap:wrap;font-size:13px}
+.phases span{padding:4px 10px;border-radius:99px;background:var(--bg);color:var(--mute)}
+.phases span.on{background:var(--accent);color:var(--accent-ink)}
+.phases span.ok{color:var(--good)}
+canvas{width:100%;height:170px;display:block;margin-top:10px}
+.verdict{border-radius:12px;padding:20px;margin-bottom:14px}
+.verdict h3{margin:0 0 4px;font-size:24px;letter-spacing:-.02em}
+.verdict.good{background:var(--good-bg)} .verdict.good h3{color:var(--good)}
+.verdict.fair{background:var(--fair-bg)} .verdict.fair h3{color:var(--fair)}
+.verdict.poor{background:var(--poor-bg)} .verdict.poor h3{color:var(--poor)}
+.verdict ul{margin:10px 0 0;padding-left:20px} .verdict li{margin:6px 0}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+.m{border:1px solid var(--line);border-radius:10px;padding:12px 14px;border-left:5px solid var(--line)}
+.m.good{border-left-color:var(--good)} .m.fair{border-left-color:var(--fair)} .m.poor{border-left-color:var(--poor)}
+.m .l{font-size:13px;color:var(--mute)}
+.m .v{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.m .v small{font-size:14px;color:var(--mute);font-weight:500}
+.m .e{font-size:12px;color:var(--mute)}
+.m .g{float:right;font-size:11px;font-weight:700;text-transform:uppercase;padding:2px 8px;border-radius:99px}
+.m.good .g{background:var(--good-bg);color:var(--good)} .m.fair .g{background:var(--fair-bg);color:var(--fair)} .m.poor .g{background:var(--poor-bg);color:var(--poor)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+details summary{cursor:pointer;font-weight:600}
+.err{background:var(--poor-bg);color:var(--poor);border-radius:8px;padding:12px 14px;margin-top:12px}
+.meta{font-size:13px;color:var(--mute);margin-top:12px}
+.hide{display:none!important}
+@media (max-width:560px){ .row.wrap{flex-wrap:wrap} .row.wrap button{width:100%} .big{font-size:36px} }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Net<span>Proof</span></h1>
+    <div class="me" id="me"></div>
+  </header>
+
+  <div id="incoming" class="banner hide"></div>
+
+  <section class="card" id="setup">
+    <h2><span class="step">1</span>Which connection should be tested?</h2>
+    <div id="ifaceBox"></div>
+    <p class="hint" id="ifaceHint"></p>
+  </section>
+
+  <section class="card" id="pick">
+    <h2><span class="step">2</span>Pick the other computer</h2>
+    <p class="hint" style="margin:-4px 0 10px">NetProof must be running on the other computer too. Nothing to set up there: it answers automatically.</p>
+    <div id="peers"></div>
+    <div class="row wrap" style="margin-top:6px">
+      <input id="target" placeholder="Or type its address, for example 192.168.1.50 or 100.101.102.103" autocomplete="off">
+      <button id="go">Start test</button>
+    </div>
+    <p class="hint">The test takes about 30 seconds: delay &amp; jitter, then speed in both directions.</p>
+  </section>
+
+  <section class="card hide" id="run">
+    <h2 id="runTitle">Testing</h2>
+    <div class="phases" id="phases"></div>
+    <div class="row" style="justify-content:space-between;align-items:flex-end;margin-top:12px">
+      <div class="big" id="live">0 <small>Mb/s</small></div>
+      <button class="ghost" id="cancel">Cancel</button>
+    </div>
+    <div class="bar"><i id="prog"></i></div>
+    <canvas id="chart"></canvas>
+    <div id="runErr" class="err hide"></div>
+  </section>
+
+  <section id="results" class="hide">
+    <div class="verdict" id="verdict"></div>
+    <section class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px;flex-wrap:wrap">
+        <h2 style="margin:0">Results</h2>
+        <div class="row" style="width:auto">
+          <span class="me">Compare against</span>
+          <select id="profile" style="width:auto"></select>
+        </div>
+      </div>
+      <div class="metrics" id="metrics"></div>
+      <div class="meta" id="meta"></div>
+      <div class="row" style="margin-top:14px;gap:8px;flex-wrap:wrap">
+        <button class="ghost" id="copy">Copy report</button>
+        <a id="save" href="/api/report.txt"><button class="ghost">Save report</button></a>
+        <button class="ghost" id="again">Test again</button>
+      </div>
+    </section>
+  </section>
+
+  <section class="card">
+    <details id="refBox">
+      <summary>What should a healthy network look like?</summary>
+      <p class="hint">A wired link never shows its full label speed, because about 6% goes to Ethernet, IP and TCP headers. These are the numbers a healthy, idle network gives:</p>
+      <table>
+        <thead><tr><th></th><th>100 Mb/s LAN</th><th>1 Gb/s LAN</th><th>Wi-Fi (good)</th><th>VPN / Tailscale</th></tr></thead>
+        <tbody>
+          <tr><td>Speed, each direction</td><td class="num">90 to 95 Mb/s</td><td class="num">900 to 945 Mb/s</td><td class="num">300+ Mb/s</td><td>depends on both internet links</td></tr>
+          <tr><td>Problem if below</td><td class="num">85 Mb/s</td><td class="num">850 Mb/s</td><td class="num">100 Mb/s</td><td>n/a</td></tr>
+          <tr><td>Delay (round trip)</td><td class="num">under 1 ms</td><td class="num">under 1 ms</td><td class="num">under 4 ms</td><td class="num">under 30 ms</td></tr>
+          <tr><td>Jitter</td><td class="num">under 0.5 ms</td><td class="num">under 0.5 ms</td><td class="num">under 2 ms</td><td class="num">under 3 ms</td></tr>
+          <tr><td>Packet loss</td><td class="num">0 %</td><td class="num">0 %</td><td class="num">under 0.1 %</td><td class="num">under 0.1 %</td></tr>
+          <tr><td>Extra delay when busy</td><td class="num">under 20 ms</td><td class="num">under 10 ms</td><td class="num">under 30 ms</td><td class="num">under 30 ms</td></tr>
+        </tbody>
+      </table>
+      <p class="hint"><b>Common culprits:</b> a cable that only connects at 100 Mb/s (damaged, or only 4 of 8 wires), a cheap or overheating switch, Wi-Fi in the path when you thought it was wired, a busy network during the test, or a VPN relaying traffic through a far away server.</p>
+    </details>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let S = null, lastFp = "", userTyped = false;
+
+async function api(path, body){
+  const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body||{})});
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtMbps = v => v >= 100 ? Math.round(v) : v.toFixed(1);
+const fmtVal = m => m.unit === "Mb/s" ? fmtMbps(m.value) : (m.unit === "%" ? m.value.toFixed(2) : (m.value < 10 ? m.value.toFixed(2) : m.value.toFixed(1)));
+const gradeWord = {good:"Good", fair:"Fair", poor:"Bad", info:"Info"};
+
+function renderIfaces(){
+  const ifs = S.interfaces || [];
+  const box = $("ifaceBox");
+  const fp = JSON.stringify(ifs) + S.bindIP;
+  if (box.dataset.fp === fp) return;
+  box.dataset.fp = fp;
+  if (ifs.length <= 1){
+    box.innerHTML = ifs.length ? `<div><b>${esc(ifs[0].label)}</b></div>` : `<div class="empty">No network connection found.</div>`;
+    $("ifaceHint").textContent = ifs.length ? "This is the only network connection on this computer." : "";
+    return;
+  }
+  let o = `<option value="">Automatic (let ${esc(S.os === "windows" ? "Windows" : "the computer")} choose)</option>`;
+  for (const i of ifs) o += `<option value="${esc(i.ip)}" ${i.ip === S.bindIP ? "selected" : ""}>${esc(i.label)}</option>`;
+  box.innerHTML = `<select id="iface">${o}</select>`;
+  $("iface").onchange = e => api("/api/bind", {ip:e.target.value}).then(poll);
+  $("ifaceHint").textContent = "This computer has more than one connection. To test over Tailscale or a VPN, pick it here and use the other computer's VPN address.";
+}
+
+function renderPeers(){
+  const ps = S.peers || [];
+  const fp = JSON.stringify(ps.map(p=>[p.addr,p.host,p.via])) + S.test.running;
+  if (fp === lastFp) return;
+  lastFp = fp;
+  if (!ps.length){
+    $("peers").innerHTML = `<div class="empty">Looking for other computers running NetProof on your network&hellip; If the other one is on a VPN or a different network, type its address below.</div>`;
+    return;
+  }
+  $("peers").innerHTML = ps.map(p => `
+    <div class="peer">
+      <div class="n"><b>${esc(p.host)}<span class="tag">${esc(p.via)}</span></b><small>${esc(p.addr)} &middot; ${esc(p.os)}</small></div>
+      <button data-addr="${esc(p.addr)}" ${S.test.running ? "disabled" : ""}>Test</button>
+    </div>`).join("");
+  for (const b of $("peers").querySelectorAll("button")) b.onclick = () => start(b.dataset.addr);
+}
+
+async function start(target){
+  $("runErr").classList.add("hide");
+  try { await api("/api/start", {target}); $("results").classList.add("hide"); poll(); }
+  catch(e){ $("run").classList.remove("hide"); $("runErr").textContent = e.message; $("runErr").classList.remove("hide"); }
+}
+
+const PH = [["connect","Connect"],["latency","Delay & jitter"],["download","Download"],["upload","Upload"]];
+function renderRun(){
+  const t = S.test;
+  const show = t.running || t.phase === "error";
+  $("run").classList.toggle("hide", !show);
+  if (!show) return;
+  $("runTitle").textContent = t.running ? "Testing with " + t.target : "Test stopped";
+  const idx = PH.findIndex(p => p[0] === t.phase);
+  $("phases").innerHTML = PH.map((p,i) => `<span class="${i === idx ? "on" : (i < idx ? "ok" : "")}">${i < idx ? "&#10003; " : ""}${p[1]}</span>`).join("");
+  $("prog").style.width = (t.progress*100).toFixed(1) + "%";
+  if (t.phase === "latency") $("live").innerHTML = `${(t.lastRtt||0).toFixed(2)} <small>ms delay</small>`;
+  else if (t.phase === "download" || t.phase === "upload") $("live").innerHTML = `${fmtMbps(t.currentMbps||0)} <small>Mb/s ${t.phase}</small>`;
+  else $("live").innerHTML = `&hellip;`;
+  $("cancel").classList.toggle("hide", !t.running);
+  $("go").disabled = t.running;
+  if (t.error){ $("runErr").textContent = t.error; $("runErr").classList.remove("hide"); }
+  drawChart(t.samples || []);
+}
+
+function drawChart(samples){
+  const c = $("chart"), dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  if (!w) return;
+  c.width = w*dpr; c.height = h*dpr;
+  const g = c.getContext("2d"); g.scale(dpr,dpr); g.clearRect(0,0,w,h);
+  const cs = getComputedStyle(document.documentElement);
+  const line = cs.getPropertyValue("--line"), mute = cs.getPropertyValue("--mute");
+  const thr = samples.filter(s => (s.phase === "download" || s.phase === "upload"));
+  const T = 29, maxM = Math.max(10, ...thr.map(s => s.mbps)) * 1.15;
+  const x = t => 40 + (w-50) * Math.min(t,T)/T, y = v => h-14 - (h-34) * v/maxM;
+  g.strokeStyle = line; g.fillStyle = mute; g.font = "11px system-ui"; g.lineWidth = 1;
+  for (let i=0;i<=4;i++){ const v = maxM*i/4; g.beginPath(); g.moveTo(40,y(v)); g.lineTo(w-10,y(v)); g.stroke(); g.fillText(v>=100?Math.round(v):v.toFixed(0), 4, y(v)+4); }
+  g.fillText("Mb/s", 4, 9);
+  for (const ph of ["download","upload"]){
+    const pts = thr.filter(s => s.phase === ph && s.mbps > 0);
+    if (!pts.length) continue;
+    g.strokeStyle = cs.getPropertyValue(ph === "download" ? "--chart" : "--chart2"); g.lineWidth = 2; g.beginPath();
+    pts.forEach((s,i) => i ? g.lineTo(x(s.t),y(s.mbps)) : g.moveTo(x(s.t),y(s.mbps))); g.stroke();
+    g.fillStyle = g.strokeStyle; g.fillText(ph, x(pts[0].t)+4, 12);
+  }
+}
+
+function renderResult(res, isIncoming){
+  $("results").classList.toggle("hide", !res);
+  if (!res) return;
+  const v = $("verdict");
+  v.className = "verdict " + res.verdict;
+  const who = isIncoming ? `<p style="margin:0 0 8px">Test run by <b>${esc(res.localHost)}</b> against this computer.</p>` : "";
+  v.innerHTML = `<h3>${esc(res.headline)}</h3>${who}<ul>${res.findings.map(f => `<li>${esc(f)}</li>`).join("")}</ul>`;
+  $("metrics").innerHTML = res.metrics.map(m => `
+    <div class="m ${m.grade}">
+      ${m.grade !== "info" ? `<span class="g">${gradeWord[m.grade]}</span>` : ""}
+      <div class="l">${esc(m.label)}</div>
+      <div class="v">${fmtVal(m)} <small>${esc(m.unit)}</small></div>
+      <div class="e">Expected: ${esc(m.expect)}</div>
+    </div>`).join("");
+  const side = (iface, kind, link) => iface ? `${esc(iface)} (${{wired:"wired",wifi:"Wi-Fi",vpn:"VPN",virtual:"virtual"}[kind]||kind}${link>0 && kind!=="vpn" ? ", link " + (link>=1000 ? link/1000 + " Gb/s" : link + " Mb/s") : ""})` : "unknown";
+  $("meta").innerHTML = `${esc(res.localHost)}: ${side(res.localIface,res.localKind,res.localLinkMbps)} &nbsp;&middot;&nbsp; ${esc(res.remoteHost)}: ${side(res.remoteIface,res.remoteKind,res.remoteLinkMbps)}<br>
+    Delay ranged ${res.idleRttMin.toFixed(2)} to ${res.idleRttMax.toFixed(2)} ms over ${res.sent} ${esc(res.latencyMethod)} probes. Busy delay: ${res.downLoadedRtt.toFixed(2)} ms (download), ${res.upLoadedRtt.toFixed(2)} ms (upload). ${esc(res.time)}`;
+  const sel = $("profile");
+  const want = (S.profile === "auto" ? "auto" : res.profileKey);
+  const opts = `<option value="auto">Automatic${S.profile==="auto" ? " (" + esc(res.profileName) + ")" : ""}</option>` + S.profiles.map(p => `<option value="${p.key}">${esc(p.name)}</option>`).join("");
+  if (sel.dataset.fp !== opts){ sel.innerHTML = opts; sel.dataset.fp = opts; }
+  if (document.activeElement !== sel) sel.value = want;
+  $("save").href = "/api/report.txt" + (isIncoming ? "?which=incoming" : "");
+  $("copy").dataset.which = isIncoming ? "incoming" : "";
+}
+
+function renderIncoming(){
+  const inc = S.incoming, b = $("incoming");
+  if (!inc || S.test.running){ b.classList.add("hide"); return; }
+  const fresh = (Date.now() - new Date(inc.started).getTime()) < 60000;
+  if (inc.result){ b.classList.add("hide"); return; }
+  if (!fresh){ b.classList.add("hide"); return; }
+  b.innerHTML = `<div><b>${esc(inc.fromHost)}</b> (${esc(inc.fromIP)}) is testing this computer now. Results will show here in about 30 seconds.</div>`;
+  b.classList.remove("hide");
+}
+
+async function poll(){
+  try {
+    const r = await fetch("/api/state", {cache:"no-store"});
+    S = await r.json();
+  } catch(e){ $("me").textContent = "NetProof has stopped. Start it again to continue."; return; }
+  $("me").textContent = `This computer: ${S.host} · v${S.version}`;
+  renderIfaces(); renderPeers(); renderRun(); renderIncoming();
+  // Show whichever result is newest: ours, or one the other side ran against us.
+  let res = S.result, inc = false;
+  if (S.incoming && S.incoming.result && (!res || S.incoming.result.time > res.time)){ res = S.incoming.result; inc = true; }
+  renderResult(S.test.running ? null : res, inc);
+  if (!userTyped && !$("target").value && S.test.target) $("target").value = S.test.target;
+}
+
+$("go").onclick = () => start($("target").value);
+$("target").addEventListener("keydown", e => { userTyped = true; if (e.key === "Enter") start($("target").value); });
+$("cancel").onclick = () => api("/api/cancel");
+$("again").onclick = () => { const t = (S.result && !$("copy").dataset.which) ? S.test.target : (S.incoming ? S.incoming.fromIP : $("target").value); start(t || $("target").value); };
+$("profile").onchange = e => api("/api/profile", {profile:e.target.value}).then(poll);
+$("copy").onclick = async () => {
+  const txt = await (await fetch("/api/report.txt" + ($("copy").dataset.which ? "?which=incoming" : ""))).text();
+  try { await navigator.clipboard.writeText(txt); $("copy").textContent = "Copied"; }
+  catch { const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); $("copy").textContent = "Copied"; }
+  setTimeout(() => $("copy").textContent = "Copy report", 1500);
+};
+window.addEventListener("resize", () => S && drawChart(S.test.samples || []));
+poll(); setInterval(poll, 500);
+</script>
+</body>
+</html>
