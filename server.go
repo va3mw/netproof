@@ -12,8 +12,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -417,47 +415,22 @@ func (a *App) peerList() []Peer {
 
 // ---------------------------------------------------------------- tailscale
 
-func findTailscale() string {
-	if p, err := exec.LookPath("tailscale"); err == nil {
-		return p
-	}
-	var cands []string
-	switch runtime.GOOS {
-	case "windows":
-		cands = []string{
-			filepath.Join(os.Getenv("ProgramFiles"), "Tailscale", "tailscale.exe"),
-			`C:\Program Files\Tailscale\tailscale.exe`,
-		}
-	case "darwin":
-		cands = []string{"/Applications/Tailscale.app/Contents/MacOS/Tailscale"}
-	}
-	for _, c := range cands {
-		if st, err := os.Stat(c); err == nil && !st.IsDir() {
-			return c
-		}
-	}
-	return ""
-}
-
 // tailscaleLoop finds Tailscale peers (broadcast does not cross VPNs) and
 // checks which of them are running NetProof.
 func (a *App) tailscaleLoop() {
-	ts := findTailscale()
-	if ts == "" {
+	if !tailscaleInstalled() {
 		return
 	}
 	for {
-		a.scanTailscale(ts)
+		a.scanTailscale()
 		time.Sleep(20 * time.Second)
 	}
 }
 
-func (a *App) scanTailscale(ts string) {
+func (a *App) scanTailscale() {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, ts, "status", "--json")
-	hideWindow(cmd)
-	out, err := cmd.Output()
+	out, err := tailscaleStatusJSON(ctx)
 	if err != nil {
 		return
 	}

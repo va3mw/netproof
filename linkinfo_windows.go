@@ -3,9 +3,7 @@
 package main
 
 import (
-	"os/exec"
 	"strings"
-	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -61,16 +59,4 @@ func osLinkInfo() map[string]osIfInfo {
 		out[name] = oi
 	}
 	return out
-}
-
-func hideWindow(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-}
-
-// openURL asks Windows to open the default browser, the same way
-// double-clicking a link does.
-func openURL(url string) {
-	verb, _ := windows.UTF16PtrFromString("open")
-	u, _ := windows.UTF16PtrFromString(url)
-	_ = windows.ShellExecute(0, verb, u, nil, nil, windows.SW_SHOWNORMAL)
 }

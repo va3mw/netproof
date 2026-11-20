@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"runtime"
 	"strconv"
@@ -21,7 +20,7 @@ import (
 
 const (
 	appName     = "NetProof"
-	appVersion  = "1.2.0"
+	appVersion  = "1.2.1"
 	defDataPort = 47800 // TCP + UDP: test traffic and control
 	defDiscPort = 47801 // UDP: LAN discovery broadcasts
 	defUIPort   = 47880 // HTTP on 127.0.0.1: the user interface
@@ -154,23 +153,6 @@ func (a *App) runCLI(target string) int {
 	fmt.Println()
 	fmt.Println(res.Text())
 	return 0
-}
-
-func openBrowser(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		openURL(url) // ShellExecute, see linkinfo_windows.go
-		return
-	case "darwin":
-		cmd = exec.Command("open", url)
-	default:
-		if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
-			return // headless Linux box: the URL is printed in the console
-		}
-		cmd = exec.Command("xdg-open", url)
-	}
-	_ = cmd.Start()
 }
 
 func pauseOnWindows() {
