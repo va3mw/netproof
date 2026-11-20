@@ -57,7 +57,8 @@ type Peer struct {
 	IP       string    `json:"ip"`
 	Host     string    `json:"host"`
 	OS       string    `json:"os"`
-	Via      string    `json:"via"` // "LAN" or "Tailscale"
+	Via      string    `json:"via"`           // "LAN" or "Tailscale"
+	DNS      string    `json:"dns,omitempty"` // MagicDNS name
 	LastSeen time.Time `json:"-"`
 }
 
@@ -430,43 +431,24 @@ func (a *App) tailscaleLoop() {
 func (a *App) scanTailscale() {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	out, err := tailscaleStatusJSON(ctx)
+	peers, err := tailscalePeers(ctx)
 	if err != nil {
 		return
 	}
-	var st struct {
-		Peer map[string]struct {
-			HostName     string
-			TailscaleIPs []string
-			Online       bool
-		}
-	}
-	if json.Unmarshal(out, &st) != nil {
-		return
-	}
 	var wg sync.WaitGroup
-	for _, p := range st.Peer {
-		if !p.Online {
-			continue
-		}
-		var ip string
-		for _, x := range p.TailscaleIPs {
-			if v := net.ParseIP(x); v != nil && v.To4() != nil {
-				ip = x
-			}
-		}
-		if ip == "" {
+	for _, p := range peers {
+		if !p.Online || p.IPv4 == "" {
 			continue
 		}
 		wg.Add(1)
-		go func(ip string) {
+		go func(p tsPeer) {
 			defer wg.Done()
-			h, err := a.hello(ip, a.port, 1500*time.Millisecond)
+			h, err := a.hello(p.IPv4, a.port, 1500*time.Millisecond)
 			if err != nil {
 				return
 			}
-			a.addPeer(&Peer{ID: "ts-" + ip, Addr: ip, IP: ip, Host: h.Host, OS: h.OS, Via: "Tailscale"})
-		}(ip)
+			a.addPeer(&Peer{ID: "ts-" + p.IPv4, Addr: p.IPv4, IP: p.IPv4, Host: h.Host, OS: h.OS, Via: "Tailscale", DNS: p.DNSName})
+		}(p)
 	}
 	wg.Wait()
 }

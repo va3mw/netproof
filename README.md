@@ -7,7 +7,8 @@ Network speed, delay and jitter tester that anyone can run. One file, nothing to
 1. Run NetProof on **both** computers (`netproof.exe` on Windows, `./netproof-linux-amd64` on Debian).
    A browser window opens by itself.
 2. On **one** of them, click **Test** next to the other computer's name.
-   If it is not listed (VPN, Tailscale, another subnet), type its address and click **Start test**.
+   If it is not listed (VPN, Tailscale, another subnet), type its address or name and click **Start test**.
+   Tailscale MagicDNS names work: `boathouse2` or `boathouse2.tail1234.ts.net`.
 3. Wait about 45 seconds. Both screens show the verdict and a "How to fix it" checklist.
 
 You do not need to choose "client" or "server". Whichever computer presses Test drives the test;
@@ -84,6 +85,14 @@ or when delay is above 5 ms on any wired link, and shows the reason with the res
 The expected profile is picked automatically from the adapters' link speed and type (wired,
 Wi-Fi, VPN, Tailscale 100.x addresses) and can be changed on the results screen. It also flags
 adapters stuck at 100 Mb/s or 10 Mb/s, half duplex, and lopsided up/down speeds.
+
+## Names and Tailscale MagicDNS
+
+A typed name is resolved once at the start of the test (IPv4 preferred, so every part of the
+test takes the same path). If the computer's DNS does not know the name, NetProof looks it up in
+Tailscale itself (short MagicDNS name, full `.ts.net` name or Tailscale host name), so MagicDNS
+names work even when "Use Tailscale DNS" is off or on Linux without Tailscale DNS. Tailscale
+peers running NetProof are listed automatically with their MagicDNS names.
 
 ## Ports
 

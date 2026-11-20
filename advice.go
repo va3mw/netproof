@@ -109,7 +109,7 @@ func buildFixes(r *Result, p Profile) []Fix {
 			"Make sure both ends connect directly rather than through a relay server.",
 			"Check the VPN endpoint (router or PC) is not overloaded: encryption on a small router can be the bottleneck.",
 		}
-		if ip := net.ParseIP(r.RemoteIP); ip != nil && tailscaleNet.Contains(ip) {
+		if ip := net.ParseIP(r.RemoteIP); isTailscaleIP(ip) {
 			steps = append(steps, "For Tailscale, run \"tailscale ping "+r.RemoteHost+"\": if it says \"via DERP\" the traffic is relayed. Allowing UDP port 41641 through both firewalls, or enabling UPnP / NAT-PMP on the routers, usually makes it direct.")
 		}
 		add(Fix{"Make the VPN path cleaner", steps})

@@ -60,6 +60,7 @@ type Result struct {
 
 	RemoteHost     string `json:"remoteHost"`
 	RemoteIP       string `json:"remoteIP"`
+	RemoteName     string `json:"remoteName,omitempty"` // what the user typed / MagicDNS name
 	RemoteOS       string `json:"remoteOS"`
 	RemoteIface    string `json:"remoteIface"`
 	RemoteKind     string `json:"remoteKind"`
@@ -102,8 +103,8 @@ type Result struct {
 func (r *Result) autoProfile() (string, string) {
 	ip := r.RemoteIP
 	switch {
-	case ip != "" && tailscaleNet.Contains(parseIP(ip)):
-		return "vpn", "the other computer was reached by its Tailscale address"
+	case isTailscaleIP(parseIP(ip)):
+		return "vpn", "the other computer was reached over Tailscale"
 	case r.LocalKind == "vpn":
 		return "vpn", "this computer used its VPN connection (" + r.LocalIface + ")"
 	case r.Route == "routed" && r.IdleRTT > 3:
@@ -369,7 +370,7 @@ func (r *Result) Grade(profile string) {
 	}
 	if p.Key == "vpn" {
 		add("info", "This test went through a VPN, a router between sites, or the internet. Speed then depends on both internet connections and on how the VPN routes traffic, so there is no fixed speed target. Delay, jitter and loss matter most here.")
-		if r.IdleRTT > 0 && p.Key == "vpn" && tailscaleNet.Contains(parseIP(r.RemoteIP)) && r.IdleRTT > 40 {
+		if r.IdleRTT > 0 && p.Key == "vpn" && isTailscaleIP(parseIP(r.RemoteIP)) && r.IdleRTT > 40 {
 			add("info", "If Tailscale is relaying this connection (\"relay\" in tailscale status), delay will be higher than a direct connection.")
 		}
 	}
@@ -453,7 +454,11 @@ func (r *Result) Text() string {
 	var b strings.Builder
 	mark := map[string]string{"good": "OK  ", "fair": "FAIR", "poor": "BAD ", "info": "    "}
 	fmt.Fprintf(&b, "NetProof %s report  %s\n", r.Version, r.Time)
-	fmt.Fprintf(&b, "%s (%s) <-> %s (%s)\n", r.LocalHost, nz(r.LocalIP), r.RemoteHost, r.RemoteIP)
+	remote := r.RemoteIP
+	if r.RemoteName != "" {
+		remote = r.RemoteName + " = " + r.RemoteIP
+	}
+	fmt.Fprintf(&b, "%s (%s) <-> %s (%s)\n", r.LocalHost, nz(r.LocalIP), r.RemoteHost, remote)
 	fmt.Fprintf(&b, "This end:  %s\n", sideDesc(r.LocalIface, r.LocalKind, r.LocalLinkMbps))
 	fmt.Fprintf(&b, "Far end:   %s\n", sideDesc(r.RemoteIface, r.RemoteKind, r.RemoteLinkMbps))
 	auto := ""

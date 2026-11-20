@@ -104,7 +104,7 @@ details summary{cursor:pointer;font-weight:600}
     <p class="hint" style="margin:-4px 0 10px">NetProof must be running on the other computer too. Nothing to set up there: it answers automatically.</p>
     <div id="peers"></div>
     <div class="row wrap" style="margin-top:6px">
-      <input id="target" placeholder="Or type its address, for example 192.168.1.50 or 100.101.102.103" autocomplete="off">
+      <input id="target" placeholder="Or type its address or name: 192.168.1.50, 100.101.102.103 or a Tailscale name like boathouse2" autocomplete="off">
       <button id="go">Start test</button>
     </div>
     <div class="ctype">
@@ -224,7 +224,7 @@ function renderPeers(){
   }
   $("peers").innerHTML = ps.map(p => `
     <div class="peer">
-      <div class="n"><b>${esc(p.host)}<span class="tag">${esc(p.via)}</span></b><small>${esc(p.addr)} &middot; ${esc(p.os)}</small></div>
+      <div class="n"><b>${esc(p.host)}<span class="tag">${esc(p.via)}</span></b><small>${p.dns ? esc(p.dns) + " &middot; " : ""}${esc(p.addr)} &middot; ${esc(p.os)}</small></div>
       <button data-addr="${esc(p.addr)}" ${S.test.running ? "disabled" : ""}>Test</button>
     </div>`).join("");
   for (const b of $("peers").querySelectorAll("button")) b.onclick = () => start(b.dataset.addr);
@@ -294,7 +294,7 @@ function renderResult(res, isIncoming){
       <div class="e">Expected: ${esc(m.expect)}</div>
     </div>`).join("");
   const side = (iface, kind, link) => iface ? `${esc(iface)} (${{wired:"wired",wifi:"Wi-Fi",vpn:"VPN",virtual:"virtual"}[kind]||kind}${link>0 && kind!=="vpn" ? ", link " + (link>=1000 ? link/1000 + " Gb/s" : link + " Mb/s") : ""})` : "unknown";
-  $("meta").innerHTML = `${esc(res.localHost)}: ${side(res.localIface,res.localKind,res.localLinkMbps)} &nbsp;&middot;&nbsp; ${esc(res.remoteHost)}: ${side(res.remoteIface,res.remoteKind,res.remoteLinkMbps)}<br>
+  $("meta").innerHTML = `${res.remoteName ? "Tested " + esc(res.remoteName) + " (" + esc(res.remoteIP) + ")<br>" : ""}${esc(res.localHost)}: ${side(res.localIface,res.localKind,res.localLinkMbps)} &nbsp;&middot;&nbsp; ${esc(res.remoteHost)}: ${side(res.remoteIface,res.remoteKind,res.remoteLinkMbps)}<br>
     Compared against <b>${esc(res.profileName)}</b>${res.profileAuto && res.autoReason ? " (automatic: " + esc(res.autoReason) + ")" : (res.practice ? "" : " (your choice)")}.<br>
     Delay ranged ${res.idleRttMin.toFixed(2)} to ${res.idleRttMax.toFixed(2)} ms over ${res.sent} ${esc(res.latencyMethod)} probes. Busy delay: ${res.downLoadedRtt.toFixed(2)} ms (download), ${res.upLoadedRtt.toFixed(2)} ms (upload).
     ${udpLine(res.udpDown, res.remoteHost + " → " + res.localHost, res.udpRateMbps)}${udpLine(res.udpUp, res.localHost + " → " + res.remoteHost, res.udpRateMbps)}

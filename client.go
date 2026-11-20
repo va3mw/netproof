@@ -183,6 +183,12 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 	if host == "" {
 		return nil, errors.New("enter the other computer's IP address or name")
 	}
+	a.setPhase("connect", "Finding "+host)
+	ip, typedName, err := resolveTarget(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	host = ip
 	practice := isLoopbackHost(host)
 	a.mu.Lock()
 	a.noBind = practice
@@ -191,7 +197,11 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 
 	h, err := a.helloOp(ctx, host, port, "hello")
 	if err != nil {
-		return nil, fmt.Errorf("could not reach NetProof on %s. Make sure NetProof is running on that computer, the address is right, and the firewall allows it (%v)", host, err)
+		where := host
+		if typedName != "" {
+			where = typedName + " (" + host + ")"
+		}
+		return nil, fmt.Errorf("could not reach NetProof on %s. Make sure NetProof is running on that computer, the address is right, and the firewall allows it (%v)", where, err)
 	}
 	self := h.ID == a.id
 	if h.Busy && !self {
@@ -209,6 +219,7 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 		LocalHost:  a.host,
 		RemoteHost: h.Host,
 		RemoteIP:   host,
+		RemoteName: typedName,
 		RemoteOS:   h.OS,
 		RemoteKind: h.Kind, RemoteIface: h.Iface, RemoteLinkMbps: h.LinkMbps, RemoteDuplex: h.Duplex,
 		Practice: practice,
@@ -226,18 +237,13 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 	if practice {
 		r.LocalIP = "127.0.0.1"
 	} else if r.LocalIP == "" {
-		if ips, _ := net.LookupHost(host); len(ips) > 0 {
-			r.LocalIP = localIPFor(ips[0])
-		}
+		r.LocalIP = localIPFor(host)
 	}
 	if !practice {
-		if ips, _ := net.LookupHost(host); len(ips) > 0 {
-			r.RemoteIP = ips[0]
-			if onLocalSubnet(ips[0]) {
-				r.Route = "local"
-			} else {
-				r.Route = "routed"
-			}
+		if onLocalSubnet(host) {
+			r.Route = "local"
+		} else {
+			r.Route = "routed"
 		}
 	}
 	if ifc, ok := a.ifaceForIP(r.LocalIP); ok {

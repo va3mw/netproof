@@ -89,7 +89,7 @@ func (a *App) interfaces() []IfaceInfo {
 			oi := info[ifc.Name]
 			it := IfaceInfo{Name: ifc.Name, IP: ipn.IP.String(), LinkMbps: oi.SpeedMbps, Duplex: oi.Duplex, Desc: oi.Desc}
 			switch {
-			case tailscaleNet.Contains(ipn.IP) || isVPNName(ifc.Name) || isVPNName(oi.Desc) || ifc.Flags&net.FlagPointToPoint != 0:
+			case isTailscaleIP(ipn.IP) || isVPNName(ifc.Name) || isVPNName(oi.Desc) || ifc.Flags&net.FlagPointToPoint != 0:
 				it.Kind = "vpn"
 			case oi.Wireless:
 				it.Kind = "wifi"
@@ -113,7 +113,7 @@ func (a *App) interfaces() []IfaceInfo {
 
 func ifaceLabel(it IfaceInfo) string {
 	kind := map[string]string{"wired": "Wired", "wifi": "Wi-Fi", "vpn": "VPN", "virtual": "Virtual"}[it.Kind]
-	if it.Kind == "vpn" && (strings.Contains(strings.ToLower(it.Name+it.Desc), "tailscale") || tailscaleNet.Contains(net.ParseIP(it.IP))) {
+	if it.Kind == "vpn" && (strings.Contains(strings.ToLower(it.Name+it.Desc), "tailscale") || isTailscaleIP(net.ParseIP(it.IP))) {
 		kind = "Tailscale VPN"
 	}
 	s := kind + ": " + it.Name + "  (" + it.IP + ")"
@@ -177,7 +177,7 @@ func broadcastAddrs() []string {
 
 // localIPFor asks the OS which local address it would use to reach target.
 func localIPFor(target string) string {
-	c, err := net.Dial("udp4", net.JoinHostPort(target, "9"))
+	c, err := net.Dial("udp", net.JoinHostPort(target, "9"))
 	if err != nil {
 		return ""
 	}
