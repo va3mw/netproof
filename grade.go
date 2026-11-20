@@ -78,6 +78,7 @@ type Result struct {
 	DownLoadedRTT float64 `json:"downLoadedRtt"`
 	UpLoadedRTT   float64 `json:"upLoadedRtt"`
 	LatencyMethod string  `json:"latencyMethod"`
+	Practice      bool    `json:"practice"`
 
 	ProfileKey  string   `json:"profileKey"`
 	ProfileName string   `json:"profileName"`
@@ -162,6 +163,10 @@ func (r *Result) Grade(profile string) {
 	p := profiles[profile]
 	r.ProfileKey, r.ProfileName = p.Key, p.Name
 	r.Metrics, r.Findings = nil, nil
+	if r.Practice {
+		r.gradePractice()
+		return
+	}
 
 	down := r.RemoteHost + " → " + r.LocalHost
 	up := r.LocalHost + " → " + r.RemoteHost
@@ -298,6 +303,27 @@ func (r *Result) Grade(profile string) {
 		r.Headline = "Your network works, but it is not as good as it should be"
 	default:
 		r.Headline = "Your network has problems"
+	}
+}
+
+// gradePractice: a loopback test never touches the network, so the numbers
+// only show how NetProof works. Nothing is graded.
+func (r *Result) gradePractice() {
+	r.ProfileKey, r.ProfileName, r.ProfileAuto = "practice", "Practice run (no network)", true
+	exp := "practice run: not graded"
+	r.Metrics = []Metric{
+		{Key: "down", Label: "Download (practice)", Value: r.DownMbps, Unit: "Mb/s", Grade: "info", Expect: exp},
+		{Key: "up", Label: "Upload (practice)", Value: r.UpMbps, Unit: "Mb/s", Grade: "info", Expect: exp},
+		{Key: "rtt", Label: "Delay (round trip)", Value: r.IdleRTT, Unit: "ms", Grade: "info", Expect: exp},
+		{Key: "jitter", Label: "Jitter", Value: r.JitterMs, Unit: "ms", Grade: "info", Expect: exp},
+		{Key: "loss", Label: "Packet loss", Value: r.LossPct, Unit: "%", Grade: "info", Expect: exp},
+		{Key: "bloat", Label: "Extra delay when busy", Value: maxf(0, maxf(r.DownLoadedRTT, r.UpLoadedRTT)-r.IdleRTT), Unit: "ms", Grade: "info", Expect: exp},
+	}
+	r.Verdict = "practice"
+	r.Headline = "Practice run finished"
+	r.Findings = []string{
+		"This test never left this computer, so the speeds are far higher than any real network and nothing is graded. It only shows you what a test looks like.",
+		"For a real test, start NetProof on a second computer and pick it from the list (or type its address).",
 	}
 }
 

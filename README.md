@@ -21,6 +21,18 @@ its address; run the test from the other computer, or from the command line:
 `./netproof-linux-amd64 192.168.1.50`. If `ufw` is on: `sudo ufw allow 47800:47801/tcp` and
 `sudo ufw allow 47800:47801/udp`.
 
+## Practising on one computer
+
+Two ways, so new users can get used to it before involving a second machine:
+
+* **Practice run button.** Start NetProof and click **Practice run**. It tests the computer
+  against itself. Results are shown but not graded, because no network is involved.
+* **Two copies side by side.** Start NetProof normally, then start a second copy with
+  `netproof --second` (on Windows, double-click `NetProof second copy.bat` placed next to
+  `netproof.exe`). The two copies list each other as "first copy" and "second copy" under
+  "This computer"; press **Test** in either window and watch both screens, just like a real test.
+  The second copy uses ports 47810 and 47890.
+
 ## What it measures (about 30 s total)
 
 | Phase | Time | How |

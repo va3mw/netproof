@@ -10,6 +10,7 @@ import (
 	"math"
 	"net"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -80,13 +81,29 @@ func (a *App) snapshotTest() TestState {
 
 func (a *App) dialer(timeout time.Duration) *net.Dialer {
 	d := &net.Dialer{Timeout: timeout}
-	a.mu.Lock()
-	b := a.bindIP
-	a.mu.Unlock()
-	if ip := net.ParseIP(b); ip != nil {
+	if ip := net.ParseIP(a.localBind()); ip != nil {
 		d.LocalAddr = &net.TCPAddr{IP: ip}
 	}
 	return d
+}
+
+// localBind is the chosen interface address, except during a practice run
+// over loopback where binding to a LAN address would fail.
+func (a *App) localBind() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.noBind {
+		return ""
+	}
+	return a.bindIP
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (a *App) dialOp(ctx context.Context, host string, port int, req Request) (net.Conn, *bufio.Reader, error) {
@@ -166,15 +183,24 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 	if host == "" {
 		return nil, errors.New("enter the other computer's IP address or name")
 	}
+	practice := isLoopbackHost(host)
+	a.mu.Lock()
+	a.noBind = practice
+	a.mu.Unlock()
+	defer func() { a.mu.Lock(); a.noBind = false; a.mu.Unlock() }()
+
 	h, err := a.helloOp(ctx, host, port, "hello")
 	if err != nil {
 		return nil, fmt.Errorf("could not reach NetProof on %s. Make sure NetProof is running on that computer, the address is right, and the firewall allows it (%v)", host, err)
 	}
-	if h.Busy {
+	self := h.ID == a.id
+	if h.Busy && !self {
 		return nil, fmt.Errorf("%s is busy running its own test. Try again in a moment", h.Host)
 	}
-	if _, err := a.helloOp(ctx, host, port, "start"); err != nil {
-		return nil, err
+	if !self {
+		if _, err := a.helloOp(ctx, host, port, "start"); err != nil {
+			return nil, err
+		}
 	}
 
 	r := &Result{
@@ -185,12 +211,21 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 		RemoteIP:   host,
 		RemoteOS:   h.OS,
 		RemoteKind: h.Kind, RemoteIface: h.Iface, RemoteLinkMbps: h.LinkMbps, RemoteDuplex: h.Duplex,
+		Practice: practice,
+	}
+	if practice {
+		r.RemoteHost = h.Host + " (itself)"
+		if !self {
+			r.RemoteHost = h.Host + " (" + copyName(port) + ")"
+		}
 	}
 	// Which local connection is actually carrying the test?
 	a.mu.Lock()
 	r.LocalIP = a.bindIP
 	a.mu.Unlock()
-	if r.LocalIP == "" {
+	if practice {
+		r.LocalIP = "127.0.0.1"
+	} else if r.LocalIP == "" {
 		if ips, _ := net.LookupHost(host); len(ips) > 0 {
 			r.LocalIP = localIPFor(ips[0])
 		}
@@ -229,6 +264,9 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 	r.Grade(prof)
 
 	// Tell the far end so its screen shows the same results.
+	if self {
+		return r, nil
+	}
 	rctx, rcancel := context.WithTimeout(ctx, 3*time.Second)
 	if c, br, err := a.dialOp(rctx, host, port, Request{Op: "report", FromHost: a.host, Result: r}); err == nil {
 		_ = c.SetDeadline(time.Now().Add(3 * time.Second))
@@ -499,11 +537,9 @@ func (a *App) udpPing(ctx context.Context, host string, port int, dur, ivl time.
 		return nil, err
 	}
 	var la *net.UDPAddr
-	a.mu.Lock()
-	if ip := net.ParseIP(a.bindIP); ip != nil {
+	if ip := net.ParseIP(a.localBind()); ip != nil {
 		la = &net.UDPAddr{IP: ip}
 	}
-	a.mu.Unlock()
 	uc, err := net.DialUDP("udp", la, ra)
 	if err != nil {
 		return nil, err

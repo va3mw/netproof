@@ -56,6 +56,8 @@ canvas{width:100%;height:170px;display:block;margin-top:10px}
 .verdict.good{background:var(--good-bg)} .verdict.good h3{color:var(--good)}
 .verdict.fair{background:var(--fair-bg)} .verdict.fair h3{color:var(--fair)}
 .verdict.poor{background:var(--poor-bg)} .verdict.poor h3{color:var(--poor)}
+.verdict.practice{background:var(--card);border:1px dashed var(--accent)} .verdict.practice h3{color:var(--accent)}
+.practiceBox{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 .verdict ul{margin:10px 0 0;padding-left:20px} .verdict li{margin:6px 0}
 .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
 .m{border:1px solid var(--line);border-radius:10px;padding:12px 14px;border-left:5px solid var(--line)}
@@ -101,6 +103,10 @@ details summary{cursor:pointer;font-weight:600}
       <button id="go">Start test</button>
     </div>
     <p class="hint">The test takes about 30 seconds: delay &amp; jitter, then speed in both directions.</p>
+    <div class="practiceBox">
+      <div><b>New to NetProof?</b><br><span class="hint" style="margin:0">Try a practice run on just this computer. No second computer needed; the numbers are not graded.</span></div>
+      <button class="ghost" id="practice">Practice run</button>
+    </div>
   </section>
 
   <section class="card hide" id="run">
@@ -120,7 +126,7 @@ details summary{cursor:pointer;font-weight:600}
     <section class="card">
       <div class="row" style="justify-content:space-between;margin-bottom:12px;flex-wrap:wrap">
         <h2 style="margin:0">Results</h2>
-        <div class="row" style="width:auto">
+        <div class="row" style="width:auto" id="cmpBox">
           <span class="me">Compare against</span>
           <select id="profile" style="width:auto"></select>
         </div>
@@ -225,7 +231,7 @@ function renderRun(){
   else if (t.phase === "download" || t.phase === "upload") $("live").innerHTML = `${fmtMbps(t.currentMbps||0)} <small>Mb/s ${t.phase}</small>`;
   else $("live").innerHTML = `&hellip;`;
   $("cancel").classList.toggle("hide", !t.running);
-  $("go").disabled = t.running;
+  $("go").disabled = t.running; $("practice").disabled = t.running;
   if (t.error){ $("runErr").textContent = t.error; $("runErr").classList.remove("hide"); }
   drawChart(t.samples || []);
 }
@@ -270,6 +276,7 @@ function renderResult(res, isIncoming){
   const side = (iface, kind, link) => iface ? `${esc(iface)} (${{wired:"wired",wifi:"Wi-Fi",vpn:"VPN",virtual:"virtual"}[kind]||kind}${link>0 && kind!=="vpn" ? ", link " + (link>=1000 ? link/1000 + " Gb/s" : link + " Mb/s") : ""})` : "unknown";
   $("meta").innerHTML = `${esc(res.localHost)}: ${side(res.localIface,res.localKind,res.localLinkMbps)} &nbsp;&middot;&nbsp; ${esc(res.remoteHost)}: ${side(res.remoteIface,res.remoteKind,res.remoteLinkMbps)}<br>
     Delay ranged ${res.idleRttMin.toFixed(2)} to ${res.idleRttMax.toFixed(2)} ms over ${res.sent} ${esc(res.latencyMethod)} probes. Busy delay: ${res.downLoadedRtt.toFixed(2)} ms (download), ${res.upLoadedRtt.toFixed(2)} ms (upload). ${esc(res.time)}`;
+  $("cmpBox").classList.toggle("hide", !!res.practice);
   const sel = $("profile");
   const want = (S.profile === "auto" ? "auto" : res.profileKey);
   const opts = `<option value="auto">Automatic${S.profile==="auto" ? " (" + esc(res.profileName) + ")" : ""}</option>` + S.profiles.map(p => `<option value="${p.key}">${esc(p.name)}</option>`).join("");
@@ -304,6 +311,7 @@ async function poll(){
 }
 
 $("go").onclick = () => start($("target").value);
+$("practice").onclick = () => start("127.0.0.1");
 $("target").addEventListener("keydown", e => { userTyped = true; if (e.key === "Enter") start($("target").value); });
 $("cancel").onclick = () => api("/api/cancel");
 $("again").onclick = () => { const t = (S.result && !$("copy").dataset.which) ? S.test.target : (S.incoming ? S.incoming.fromIP : $("target").value); start(t || $("target").value); };

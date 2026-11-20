@@ -25,7 +25,11 @@ const (
 	defDataPort = 47800 // TCP + UDP: test traffic and control
 	defDiscPort = 47801 // UDP: LAN discovery broadcasts
 	defUIPort   = 47880 // HTTP on 127.0.0.1: the user interface
-	magic       = "NPRF1"
+
+	// A second copy on the same computer (--second) uses these instead.
+	secondDataPort = 47810
+	secondUIPort   = 47890
+	magic          = "NPRF1"
 )
 
 func main() {
@@ -36,6 +40,7 @@ func main() {
 	port := flag.Int("port", defDataPort, "test port (TCP and UDP)")
 	discPort := flag.Int("discovery-port", defDiscPort, "LAN discovery port (UDP)")
 	uiPort := flag.Int("ui-port", defUIPort, "web interface port on 127.0.0.1")
+	second := flag.Bool("second", false, "run a second copy on this computer, for practice")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "%s %s: network speed, latency and jitter tester\n\n", appName, appVersion)
 		fmt.Fprintf(os.Stderr, "Usage:\n  netproof                 start and open the browser window (normal use)\n")
@@ -44,6 +49,9 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	if *second {
+		*port, *uiPort = secondDataPort, secondUIPort
+	}
 
 	if _, ok := profiles[*profile]; !ok && *profile != "auto" {
 		fmt.Fprintf(os.Stderr, "unknown profile %q (use auto, 1g, 100m, wifi or vpn)\n", *profile)
@@ -75,6 +83,7 @@ func main() {
 	}
 	go a.discoveryLoop()
 	go a.tailscaleLoop()
+	go a.practicePeerLoop()
 
 	uiURL, err := a.startUI(*uiPort)
 	if err != nil {
@@ -89,7 +98,13 @@ func main() {
 	fmt.Println(" Open this in your web browser if it did not open itself:")
 	fmt.Println("   " + uiURL)
 	fmt.Println("")
-	fmt.Println(" Run NetProof on the other computer too, then press Test.")
+	if *second {
+		fmt.Println(" This is the SECOND (practice) copy. The first copy will list it")
+		fmt.Println(" as \"" + a.host + " (second copy)\". Press Test there.")
+	} else {
+		fmt.Println(" Run NetProof on the other computer too, then press Test.")
+		fmt.Println(" Just practising? Press \"Practice run\" in the browser window.")
+	}
 	fmt.Println(" Keep this window open. Close it (or press Ctrl+C) to stop.")
 	fmt.Println("==========================================================")
 	if ips := a.localIPv4s(); len(ips) > 0 {

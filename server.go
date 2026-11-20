@@ -33,6 +33,7 @@ type Request struct {
 // HelloReply describes the far end.
 type HelloReply struct {
 	Magic    string `json:"magic"`
+	ID       string `json:"id"`
 	App      string `json:"app"`
 	Version  string `json:"version"`
 	Host     string `json:"host"`
@@ -77,6 +78,7 @@ type App struct {
 	discPort int
 	bindIP   string
 	profile  string
+	noBind   bool // true while testing over loopback (practice)
 
 	peers    map[string]*Peer
 	test     TestState
@@ -177,7 +179,7 @@ func readJSONLine(br *bufio.Reader, v any, max int) error {
 }
 
 func (a *App) helloReply(local net.Addr) HelloReply {
-	r := HelloReply{Magic: magic, App: appName, Version: appVersion, Host: a.host, OS: runtime.GOOS}
+	r := HelloReply{Magic: magic, ID: a.id, App: appName, Version: appVersion, Host: a.host, OS: runtime.GOOS}
 	a.mu.Lock()
 	r.Busy = a.test.Running
 	a.mu.Unlock()
@@ -373,7 +375,7 @@ func (a *App) peerList() []Peer {
 	var out []Peer
 	for k, p := range a.peers {
 		max := 8 * time.Second
-		if p.Via == "Tailscale" {
+		if p.Via == "Tailscale" || p.Via == "This computer" {
 			max = 60 * time.Second
 		}
 		if time.Since(p.LastSeen) > max {
@@ -472,6 +474,29 @@ func (a *App) scanTailscale(ts string) {
 		}(ip)
 	}
 	wg.Wait()
+}
+
+// practicePeerLoop lists a second copy running on this same computer
+// (started with --second) so new users can practise with two windows.
+func (a *App) practicePeerLoop() {
+	other := defDataPort
+	if a.port == defDataPort {
+		other = secondDataPort
+	}
+	for {
+		if h, err := a.hello("127.0.0.1", other, time.Second); err == nil && h.ID != a.id {
+			a.addPeer(&Peer{ID: h.ID, Addr: fmt.Sprintf("127.0.0.1:%d", other), IP: fmt.Sprintf("127.0.0.1:%d", other),
+				Host: h.Host + " (" + copyName(other) + ")", OS: h.OS, Via: "This computer"})
+		}
+		time.Sleep(3 * time.Second)
+	}
+}
+
+func copyName(port int) string {
+	if port == secondDataPort {
+		return "second copy"
+	}
+	return "first copy"
 }
 
 // isNetProofUI checks whether another copy already serves the UI there.
