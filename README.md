@@ -11,6 +11,7 @@ suffer from problems an ordinary speed test never shows.
 - [What it measures](#what-it-measures)
 - [How results are judged](#how-results-are-judged)
 - [Features](#features)
+- [Versions and updates](#versions-and-updates)
 - [Running inside a FlexRadio](#running-inside-a-flexradio)
 - [Command line](#command-line)
 - [Ports and security](#ports-and-security)
@@ -115,6 +116,46 @@ also in the saved and copied text report.
 - **Both screens show the result**: the computer that was tested shows the same report.
 - **Copy or save the report** as plain text, for email or a support ticket.
 
+## Versions and updates
+
+Two copies do not need to be the same version. Each tells the other which tests it supports, and
+a test skips only what the far end cannot do, saying so in the report ("Not tested: the UDP
+stream test, because OldPC runs NetProof 1.1.0").
+
+**The far end is updated automatically.** When a tester finds the other computer running an older
+NetProof (1.7.0 or newer), it tells it to update, without asking anyone there. The other computer
+downloads the newest release from this repository's GitHub Releases, checks it, replaces its own
+program file and restarts on the same ports; the test waits up to 90 seconds for it, then
+continues. If anything goes wrong (no internet, no write access to its folder, antivirus), the
+test runs with the version it has, and the report says why the update did not happen.
+
+- Copies older than 1.7.0 cannot update themselves: install the new version there once.
+- A FlexRadio waveform is never updated this way; the report says when a newer one is available
+  for SmartSDR's Waveform Manager.
+- This computer shows a banner with **Update now** when a newer release is out.
+
+**Why this is safe:** a tester cannot send code, only say "update". The other computer installs
+nothing unless the release manifest is signed with the NetProof release key (the public half is
+built into NetProof, the private half is a GitHub Actions secret), the downloaded file matches the
+SHA-256 in that manifest, and the release is newer than what it runs. A tampered or foreign
+release is refused.
+
+**Publishing a release:** set `appVersion` in `main.go`, regenerate `rsrc_windows_*.syso`, commit,
+and push a tag:
+
+```bash
+git tag v1.7.0
+```
+
+```bash
+git push origin v1.7.0
+```
+
+The Release workflow tests, builds every platform and the waveform, signs the manifest and
+publishes the release. The repository must be public so copies of NetProof can download it, and
+must have the `NETPROOF_SIGNING_KEY` secret (from `go run ./tools/release keygen`). Keep a backup
+of that key: copies in the field only trust releases signed with it.
+
 ## Running inside a FlexRadio
 
 FLEX-8000 series and Aurora radios can run NetProof as a Docker waveform. The radio then answers
@@ -212,4 +253,8 @@ go-winres simply --arch amd64,arm64 --out rsrc --manifest cli --product-name Net
 | `radio.go` | reading a FlexRadio's name from its API |
 | `recent.go` | the "Tested before" list |
 | `ui.go`, `web/index.html` | the browser page |
+| `version.go` | versions and feature negotiation between copies |
+| `update*.go` | signed self-update and updating the far end |
 | `tools/mkwaveform` | packs the FlexRadio waveform image |
+| `tools/release` | signing key and signed update manifest |
+| `.github/workflows/release.yml` | builds, signs and publishes a release from a tag |

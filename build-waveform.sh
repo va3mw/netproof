@@ -13,7 +13,7 @@ set -eu
 cd "$(dirname "$0")"
 ARCH="${ARCH:-arm64}"
 MAX_MBPS="${MAX_MBPS:-0}"
-VERSION="$(sed -n 's/^[[:space:]]*appVersion[[:space:]]*= "\(.*\)"$/\1/p' main.go)"
+VERSION="$(sed -n 's/^var appVersion = "\(.*\)"$/\1/p' main.go)"
 mkdir -p dist/waveform
 
 CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" GOFLAGS=-buildvcs=false \

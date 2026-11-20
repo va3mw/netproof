@@ -207,6 +207,12 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 		return nil, fmt.Errorf("could not reach NetProof on %s. Make sure NetProof is running on that computer, the address is right, and the firewall allows it (%v)", where, err)
 	}
 	self := h.ID == a.id
+	// Versions: update an older far end if we can, else test what it supports.
+	var versionNotes []string
+	if !self && !practice {
+		h, versionNotes = a.reconcileVersions(ctx, host, port, h)
+	}
+	feats := peerFeatures(h)
 	a.mu.Lock()
 	a.capMbps = h.MaxMbps
 	a.mu.Unlock()
@@ -229,8 +235,10 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 		RemoteName: typedName,
 		RemoteOS:   h.OS,
 		RemoteKind: h.Kind, RemoteIface: h.Iface, RemoteLinkMbps: h.LinkMbps, RemoteDuplex: h.Duplex,
-		Practice:    practice,
-		RateCapMbps: h.MaxMbps,
+		Practice:      practice,
+		RateCapMbps:   h.MaxMbps,
+		RemoteVersion: h.Version,
+		VersionNotes:  versionNotes,
 	}
 	if h.Radio != nil {
 		r.RemoteRadio = h.Radio.Model
@@ -276,7 +284,9 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 	r.LossPct = lat.lossPct()
 
 	// 1b. Largest packet that gets through (MTU), and fragment handling.
-	if lat.method == "UDP" {
+	if !feats["mtu"] {
+		r.Skipped = append(r.Skipped, "mtu")
+	} else if lat.method == "UDP" {
 		a.setPhase("mtu", "Checking packet size (MTU)")
 		r.MTU = a.mtuTest(ctx, host, port)
 		a.tick(-1, -1)
@@ -309,7 +319,9 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 	if h.MaxMbps > 0 && r.UDPRateMbps > h.MaxMbps {
 		r.UDPRateMbps = h.MaxMbps
 	}
-	if lat.method != "UDP" {
+	if !feats["udpstream"] {
+		r.Skipped = append(r.Skipped, "udpstream")
+	} else if lat.method != "UDP" {
 		r.UDPNote = "UDP is blocked between these computers, so the UDP stream test could not run. Ham radio audio and SDR streams will not work through this path either."
 	} else {
 		a.setPhase("udpdown", fmt.Sprintf("UDP stream %s → %s at %s Mb/s", h.Host, a.hostName(), f1(r.UDPRateMbps)))

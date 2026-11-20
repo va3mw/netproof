@@ -28,23 +28,27 @@ type Request struct {
 	Result     *Result `json:"result,omitempty"`
 	Session    string  `json:"session,omitempty"`
 	Sent       int     `json:"sent,omitempty"`
+	Version    string  `json:"version,omitempty"` // update: at least this version
 }
 
 // HelloReply describes the far end.
 type HelloReply struct {
-	Magic    string     `json:"magic"`
-	ID       string     `json:"id"`
-	Radio    *RadioInfo `json:"radio,omitempty"`   // the far end is a FlexRadio
-	MaxMbps  float64    `json:"maxMbps,omitempty"` // keep test traffic under this
-	App      string     `json:"app"`
-	Version  string     `json:"version"`
-	Host     string     `json:"host"`
-	OS       string     `json:"os"`
-	Busy     bool       `json:"busy"`
-	Iface    string     `json:"iface"`
-	Kind     string     `json:"kind"`
-	LinkMbps int        `json:"linkMbps"`
-	Duplex   string     `json:"duplex,omitempty"`
+	Magic       string     `json:"magic"`
+	ID          string     `json:"id"`
+	Proto       int        `json:"proto,omitempty"`       // wire protocol version (0 = before 1.7.0)
+	Features    []string   `json:"features,omitempty"`    // tests and functions it supports
+	UpdateState string     `json:"updateState,omitempty"` // progress of an update it was asked to do
+	Radio       *RadioInfo `json:"radio,omitempty"`       // the far end is a FlexRadio
+	MaxMbps     float64    `json:"maxMbps,omitempty"`     // keep test traffic under this
+	App         string     `json:"app"`
+	Version     string     `json:"version"`
+	Host        string     `json:"host"`
+	OS          string     `json:"os"`
+	Busy        bool       `json:"busy"`
+	Iface       string     `json:"iface"`
+	Kind        string     `json:"kind"`
+	LinkMbps    int        `json:"linkMbps"`
+	Duplex      string     `json:"duplex,omitempty"`
 }
 
 type UploadReply struct {
@@ -91,6 +95,10 @@ type App struct {
 	lastRes  *Result
 	recent   recentStore
 
+	upd         updater
+	afterUpdate bool   // just restarted by an update: wait for the ports
+	latest      string // newer release seen on GitHub, for the banner
+
 	radio   *RadioInfo // set when running inside a FlexRadio
 	maxMbps float64    // responder side: speed limit testers must respect (0 = none)
 	capMbps float64    // client side, during a test: the far end's limit
@@ -125,15 +133,24 @@ func newApp(listen string, port, discPort int) *App {
 
 func (a *App) startServers() error {
 	addr := net.JoinHostPort(a.listenIP, fmt.Sprint(a.port))
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("port %d is in use (%v)", a.port, err)
-	}
-	ua, _ := net.ResolveUDPAddr("udp", addr)
-	uc, err := net.ListenUDP("udp", ua)
-	if err != nil {
-		ln.Close()
-		return fmt.Errorf("UDP port %d is in use (%v)", a.port, err)
+	var ln net.Listener
+	var uc *net.UDPConn
+	var err error
+	// Right after an update the old copy may still be letting go of the
+	// ports, so keep trying for a while.
+	for try := 0; ; try++ {
+		ln, err = net.Listen("tcp", addr)
+		if err == nil {
+			ua, _ := net.ResolveUDPAddr("udp", addr)
+			if uc, err = net.ListenUDP("udp", ua); err == nil {
+				break
+			}
+			ln.Close()
+		}
+		if !a.afterUpdate || try >= 40 {
+			return fmt.Errorf("port %d is in use (%v)", a.port, err)
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
 	go a.serveTCP(ln)
 	go a.serveUDPEcho(uc)
@@ -206,6 +223,7 @@ func (a *App) helloReply(local net.Addr) HelloReply {
 	r.Busy = a.test.Running
 	r.Radio, r.MaxMbps = a.radio, a.maxMbps
 	a.mu.Unlock()
+	r.Proto, r.Features, r.UpdateState = protoVersion, myFeatures, a.upd.get()
 	if ta, ok := local.(*net.TCPAddr); ok {
 		if ifc, ok := a.ifaceForIP(ta.IP.String()); ok {
 			r.Iface, r.Kind, r.LinkMbps, r.Duplex = ifc.Name, ifc.Kind, ifc.LinkMbps, ifc.Duplex
@@ -242,6 +260,21 @@ func (a *App) handle(c net.Conn) {
 	switch req.Op {
 	case "hello":
 		_ = writeJSONLine(c, a.helloReply(c.LocalAddr()))
+
+	case "update": // the tester has a newer version: update ourselves
+		type reply struct {
+			OK     bool   `json:"ok"`
+			Reason string `json:"reason,omitempty"`
+		}
+		var rep reply
+		if compareVersions(req.Version, appVersion) <= 0 {
+			rep.Reason = "already running " + appVersion
+		} else if err := a.startUpdate(req.Version, "asked by "+req.FromHost); err != nil {
+			rep.Reason = err.Error()
+		} else {
+			rep.OK = true
+		}
+		_ = writeJSONLine(c, rep)
 
 	case "udpstats": // results of a UDP stream the other side sent us
 		st := UDPStats{Sent: req.Sent, LossPct: 100}

@@ -97,6 +97,7 @@ details summary{cursor:pointer;font-weight:600}
     <div class="me" id="me"></div>
   </header>
 
+  <div id="updBanner" class="banner hide"></div>
   <div id="incoming" class="banner hide"></div>
 
   <section class="card" id="setup">
@@ -266,7 +267,7 @@ async function start(target){
   catch(e){ $("run").classList.remove("hide"); $("runErr").textContent = e.message; $("runErr").classList.remove("hide"); }
 }
 
-const PH = [["connect","Connect"],["latency","Delay & jitter"],["mtu","Packet size"],["download","Download"],["upload","Upload"],["udpdown","UDP stream in"],["udpup","UDP stream out"]];
+const PH = [["connect","Connect"],["update","Updating"],["latency","Delay & jitter"],["mtu","Packet size"],["download","Download"],["upload","Upload"],["udpdown","UDP stream in"],["udpup","UDP stream out"]];
 const THR = ["download","upload","udpdown","udpup"];
 function renderRun(){
   const t = S.test;
@@ -275,12 +276,13 @@ function renderRun(){
   $("run").classList.toggle("hide", !show);
   if (!show) return;
   $("runTitle").textContent = t.running ? "Testing with " + t.target : "Test stopped";
-  const idx = PH.findIndex(p => p[0] === t.phase);
-  $("phases").innerHTML = PH.map((p,i) => `<span class="${i === idx ? "on" : (i < idx ? "ok" : "")}">${i < idx ? "&#10003; " : ""}${p[1]}</span>`).join("");
+  const ph = PH.filter(p => p[0] !== "update" || t.phase === "update" || (t.samples||[]).some(x => x.phase === "update"));
+  const idx = ph.findIndex(p => p[0] === t.phase);
+  $("phases").innerHTML = ph.map((p,i) => `<span class="${i === idx ? "on" : (i < idx ? "ok" : "")}">${i < idx ? "&#10003; " : ""}${p[1]}</span>`).join("");
   $("prog").style.width = (t.progress*100).toFixed(1) + "%";
   if (t.phase === "latency") $("live").innerHTML = `${(t.lastRtt||0).toFixed(2)} <small>ms delay</small>`;
   else if (THR.includes(t.phase)) $("live").innerHTML = `${fmtMbps(t.currentMbps||0)} <small>Mb/s ${esc(t.phaseLabel)}</small>`;
-  else $("live").innerHTML = `&hellip;`;
+  else $("live").innerHTML = `<small>${esc(t.phaseLabel || "")}&hellip;</small>`;
   $("cancel").classList.toggle("hide", !t.running);
   if (t.error){ $("runErr").textContent = t.error; $("runErr").classList.remove("hide"); }
   drawChart(t.samples || []);
@@ -359,6 +361,23 @@ function udpLine(st, dir, rate){
   return `<br>UDP stream ${esc(dir)} at ${rate} Mb/s: ${st.received} of ${st.sent} packets arrived (${st.lossPct.toFixed(2)}% lost), jitter ${st.jitterMs.toFixed(2)} ms, ${st.outOfOrder} out of order.`;
 }
 
+function renderUpdate(){
+  const b = $("updBanner"), st = S.updateState || "";
+  let html = "";
+  if (st.startsWith("updating") || st.startsWith("restarting")){
+    html = `<div>Updating NetProof&hellip; the page reconnects by itself in a few seconds.</div>`;
+  } else if (st.startsWith("failed")){
+    html = `<div>The update did not work: ${esc(st.slice(8))}</div><button class="ghost" id="updGo">Try again</button>`;
+  } else if (S.latest){
+    html = `<div><b>NetProof ${esc(S.latest)} is available.</b> This computer runs ${esc(S.version)}.</div><button id="updGo">Update now</button>`;
+  }
+  b.classList.toggle("hide", !html);
+  if (b.dataset.fp === html) return; // keep the button stable between polls
+  b.dataset.fp = html;
+  b.innerHTML = html;
+  const go = $("updGo"); if (go) go.onclick = () => api("/api/update").then(poll).catch(e => alert(e.message));
+}
+
 function renderIncoming(){
   const inc = S.incoming, b = $("incoming");
   if (!inc || S.test.running){ b.classList.add("hide"); return; }
@@ -375,7 +394,7 @@ async function poll(){
     S = await r.json();
   } catch(e){ $("me").textContent = "NetProof has stopped. Start it again to continue."; return; }
   $("me").textContent = `This computer: ${S.host} · v${S.version}`;
-  renderIfaces(); renderPtype(); renderPeers(); renderRecent(); renderRun(); renderIncoming();
+  renderIfaces(); renderPtype(); renderPeers(); renderRecent(); renderUpdate(); renderRun(); renderIncoming();
   // Show whichever result is newest: ours, or one the other side ran against us.
   let res = S.result, inc = false;
   if (S.incoming && S.incoming.result && (!res || S.incoming.result.time > res.time)){ res = S.incoming.result; inc = true; }

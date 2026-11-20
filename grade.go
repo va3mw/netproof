@@ -85,20 +85,23 @@ type Result struct {
 	RemoteDuplex   string `json:"remoteDuplex,omitempty"`
 	RemoteRadio    string `json:"remoteRadio,omitempty"` // FlexRadio model when the far end is a radio
 
-	DownMbps      float64 `json:"downMbps"`
-	UpMbps        float64 `json:"upMbps"`
-	IdleRTT       float64 `json:"idleRtt"`
-	IdleRTTMin    float64 `json:"idleRttMin"`
-	IdleRTTMax    float64 `json:"idleRttMax"`
-	JitterMs      float64 `json:"jitterMs"`
-	Sent          int     `json:"sent"`
-	Lost          int     `json:"lost"`
-	LossPct       float64 `json:"lossPct"`
-	DownLoadedRTT float64 `json:"downLoadedRtt"`
-	UpLoadedRTT   float64 `json:"upLoadedRtt"`
-	LatencyMethod string  `json:"latencyMethod"`
-	Practice      bool    `json:"practice"`
-	RateCapMbps   float64 `json:"rateCapMbps,omitempty"` // far end limited test traffic to this
+	DownMbps      float64  `json:"downMbps"`
+	UpMbps        float64  `json:"upMbps"`
+	IdleRTT       float64  `json:"idleRtt"`
+	IdleRTTMin    float64  `json:"idleRttMin"`
+	IdleRTTMax    float64  `json:"idleRttMax"`
+	JitterMs      float64  `json:"jitterMs"`
+	Sent          int      `json:"sent"`
+	Lost          int      `json:"lost"`
+	LossPct       float64  `json:"lossPct"`
+	DownLoadedRTT float64  `json:"downLoadedRtt"`
+	UpLoadedRTT   float64  `json:"upLoadedRtt"`
+	LatencyMethod string   `json:"latencyMethod"`
+	Practice      bool     `json:"practice"`
+	RateCapMbps   float64  `json:"rateCapMbps,omitempty"` // far end limited test traffic to this
+	RemoteVersion string   `json:"remoteVersion,omitempty"`
+	VersionNotes  []string `json:"versionNotes,omitempty"` // updates done or not possible
+	Skipped       []string `json:"skipped,omitempty"`      // tests the far end could not do
 
 	UDPRateMbps float64    `json:"udpRateMbps"`
 	UDPDown     *UDPStats  `json:"udpDown,omitempty"`
@@ -411,6 +414,16 @@ func (r *Result) Grade(profile string) {
 	if r.Route == "routed" && lan && !r.ProfileAuto && r.IdleRTT > 3 {
 		add("info", fmt.Sprintf("The other computer is on a different network (%s) with %s delay. If this goes through a VPN or the internet, choose \"VPN / remote site / Internet\" for a fair comparison.", r.RemoteIP, ms(r.IdleRTT)))
 	}
+	for _, v := range r.VersionNotes {
+		add("info", v)
+	}
+	if len(r.Skipped) > 0 {
+		var names []string
+		for _, k := range r.Skipped {
+			names = append(names, featureNames[k])
+		}
+		add("info", fmt.Sprintf("Not tested: %s, because %s runs NetProof %s, which does not have it. Update it to get the full test.", strings.Join(names, " and "), r.RemoteHost, r.RemoteVersion))
+	}
 	if r.RateCapMbps > 0 {
 		add("info", fmt.Sprintf("%s limits test traffic to %s so a test cannot disturb live operation. Speed here shows only whether the link can carry that much.", r.RemoteHost, mbps(r.RateCapMbps)))
 	}
@@ -527,6 +540,9 @@ func (r *Result) Text() string {
 	fmt.Fprintf(&b, "%s (%s) <-> %s (%s)\n", r.LocalHost, nz(r.LocalIP), r.RemoteHost, remote)
 	fmt.Fprintf(&b, "This end:  %s\n", sideDesc(r.LocalIface, r.LocalKind, r.LocalLinkMbps))
 	fmt.Fprintf(&b, "Far end:   %s\n", sideDesc(r.RemoteIface, r.RemoteKind, r.RemoteLinkMbps))
+	if r.RemoteVersion != "" && r.RemoteVersion != r.Version {
+		fmt.Fprintf(&b, "Versions:  this end %s, far end %s\n", r.Version, r.RemoteVersion)
+	}
 	auto := ""
 	if r.ProfileAuto && r.AutoReason != "" {
 		auto = " (auto: " + r.AutoReason + ")"

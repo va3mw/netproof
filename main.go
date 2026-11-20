@@ -19,9 +19,12 @@ import (
 	"time"
 )
 
+// appVersion is a variable so a build can set it:
+// go build -ldflags "-X main.appVersion=1.7.0"
+var appVersion = "1.7.0"
+
 const (
 	appName     = "NetProof"
-	appVersion  = "1.6.0"
 	defDataPort = 47800 // TCP + UDP: test traffic and control
 	defDiscPort = 47801 // UDP: LAN discovery broadcasts
 	defUIPort   = 47880 // HTTP on 127.0.0.1: the user interface
@@ -44,6 +47,7 @@ func main() {
 	responder := flag.Bool("responder", os.Getenv("NETPROOF_RESPONDER") == "1", "answer tests only: no window (for servers and inside a FlexRadio)")
 	name := flag.String("name", os.Getenv("NETPROOF_NAME"), "name to announce (default: computer name, or the radio's model, nickname and callsign)")
 	radioAddr := flag.String("radio", os.Getenv("SSDR_RADIO_ADDRESS"), "FlexRadio API address to read the radio's name from (set by the radio)")
+	afterUpdate := flag.Bool("after-update", false, "internal: started by an update")
 	maxMbps := flag.Float64("max-mbps", envFloat("NETPROOF_MAX_MBPS"), "responder: keep test traffic from other computers under this many Mb/s (0 = no limit)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "%s %s: network speed, latency and jitter tester\n\n", appName, appVersion)
@@ -68,6 +72,16 @@ func main() {
 		a.host = *name
 	}
 	a.maxMbps = *maxMbps
+	a.afterUpdate = *afterUpdate
+	if *afterUpdate {
+		*noBrowser = true // the page that was open reconnects by itself
+		go func() {
+			time.Sleep(10 * time.Second) // the old copy may still be exiting
+			cleanupOldBinary()
+		}()
+	} else {
+		cleanupOldBinary()
+	}
 	if *bind != "" {
 		a.bindIP = *bind
 	}
@@ -97,6 +111,7 @@ func main() {
 	go a.tailscaleLoop()
 	go a.practicePeerLoop()
 	go a.recentLoop()
+	go a.releaseCheckLoop()
 
 	uiURL, err := a.startUI(*uiPort)
 	if err != nil {

@@ -30,6 +30,8 @@ type uiState struct {
 	Profiles   []Profile   `json:"profiles"`
 	Peers      []Peer      `json:"peers"`
 	Recent     []Recent    `json:"recent"`
+	Latest     string      `json:"latest"`      // newer release available, if any
+	UpdState   string      `json:"updateState"` // progress of updating this computer
 	Test       TestState   `json:"test"`
 	Result     *Result     `json:"result"`
 	Incoming   *Incoming   `json:"incoming"`
@@ -37,6 +39,10 @@ type uiState struct {
 
 func (a *App) startUI(port int) (string, error) {
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	for try := 0; err != nil && a.afterUpdate && try < 20; try++ {
+		time.Sleep(500 * time.Millisecond) // the old copy is still letting go
+		ln, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	}
 	if err != nil {
 		ln, err = net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
@@ -61,7 +67,8 @@ func (a *App) startUI(port int) (string, error) {
 			st.Profiles = append(st.Profiles, profiles[k])
 		}
 		a.mu.Lock()
-		st.BindIP, st.Profile = a.bindIP, a.profile
+		st.BindIP, st.Profile, st.Latest = a.bindIP, a.profile, a.latest
+		st.UpdState = a.upd.get()
 		if a.lastRes != nil {
 			r := *a.lastRes
 			st.Result = &r
@@ -131,6 +138,9 @@ func (a *App) startUI(port int) (string, error) {
 		}
 		a.mu.Unlock()
 		return nil
+	}))
+	mux.HandleFunc("/api/update", a.post(func(map[string]string) error {
+		return a.startUpdate("", "requested on this computer")
 	}))
 	mux.HandleFunc("/api/forget", a.post(func(body map[string]string) error {
 		a.recent.remove(body["target"])

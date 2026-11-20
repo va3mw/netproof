@@ -1,0 +1,63 @@
+name: Release
+
+# Push a tag like v1.7.0 (matching appVersion in main.go) to publish a
+# release. Copies of NetProof update themselves from the newest release,
+# so the signed manifest must be part of every release.
+#
+# Needs the repository secret NETPROOF_SIGNING_KEY (from
+# "go run ./tools/release keygen"). Regenerate rsrc_windows_*.syso for the
+# new version before tagging (see README, Building).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Tag must match the version in main.go
+        run: |
+          v="$(sed -n 's/^var appVersion = "\(.*\)"$/\1/p' main.go)"
+          if [ "v$v" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag is $GITHUB_REF_NAME but main.go says $v"
+            exit 1
+          fi
+
+      - name: Test
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Build
+        run: |
+          ./build.sh
+          ./build-waveform.sh
+
+      - name: Sign the update manifest
+        env:
+          NETPROOF_SIGNING_KEY: ${{ secrets.NETPROOF_SIGNING_KEY }}
+        run: go run ./tools/release manifest -version "${GITHUB_REF_NAME#v}" -dir dist
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "NetProof ${GITHUB_REF_NAME#v}" --generate-notes \
+            dist/netproof.exe dist/netproof-windows-arm64.exe \
+            dist/netproof-linux-amd64 dist/netproof-linux-arm64 \
+            dist/netproof-mac-arm64 dist/netproof-mac-intel \
+            "dist/NetProof second copy.bat" \
+            dist/netproof-waveform-*.tar.gz \
+            dist/netproof-update.json dist/netproof-update.json.sig
