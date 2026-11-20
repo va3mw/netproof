@@ -29,6 +29,7 @@ type uiState struct {
 	Profile    string      `json:"profile"`
 	Profiles   []Profile   `json:"profiles"`
 	Peers      []Peer      `json:"peers"`
+	Recent     []Recent    `json:"recent"`
 	Test       TestState   `json:"test"`
 	Result     *Result     `json:"result"`
 	Incoming   *Incoming   `json:"incoming"`
@@ -55,7 +56,7 @@ func (a *App) startUI(port int) (string, error) {
 	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, appName) })
 	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
 		st := uiState{App: appName, Version: appVersion, Host: a.host, OS: runtime.GOOS,
-			Interfaces: a.interfaces(), Peers: a.peerList(), Test: a.snapshotTest()}
+			Interfaces: a.interfaces(), Peers: a.peerList(), Recent: a.recent.snapshot(), Test: a.snapshotTest()}
 		for _, k := range profileOrder {
 			st.Profiles = append(st.Profiles, profiles[k])
 		}
@@ -129,6 +130,10 @@ func (a *App) startUI(port int) (string, error) {
 			a.cancel()
 		}
 		a.mu.Unlock()
+		return nil
+	}))
+	mux.HandleFunc("/api/forget", a.post(func(body map[string]string) error {
+		a.recent.remove(body["target"])
 		return nil
 	}))
 	mux.HandleFunc("/api/dismiss", a.post(func(map[string]string) error {

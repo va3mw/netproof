@@ -86,6 +86,7 @@ type App struct {
 	cancel   context.CancelFunc
 	incoming *Incoming
 	lastRes  *Result
+	recent   recentStore
 
 	us udpServer // UDP stream test state
 
@@ -101,7 +102,7 @@ func newApp(listen string, port, discPort int) *App {
 	if h == "" {
 		h = "unknown"
 	}
-	return &App{
+	a := &App{
 		id:       hex.EncodeToString(b),
 		host:     h,
 		listenIP: listen,
@@ -111,6 +112,8 @@ func newApp(listen string, port, discPort int) *App {
 		peers:    map[string]*Peer{},
 		test:     TestState{PhaseLabel: "Ready"},
 	}
+	a.recent.load()
+	return a
 }
 
 func (a *App) startServers() error {
@@ -257,6 +260,9 @@ func (a *App) handle(c net.Conn) {
 		}
 		a.incoming.Result = req.Result
 		a.mu.Unlock()
+		if ip := net.ParseIP(remoteIP(c)); ip != nil && !ip.IsLoopback() {
+			a.recent.add(Recent{Target: remoteIP(c), Host: req.FromHost, IP: remoteIP(c)})
+		}
 		fmt.Printf("[%s] Results from %s:\n%s\n", time.Now().Format("15:04:05"), req.FromHost, req.Result.Text())
 		_, _ = c.Write([]byte("{}\n"))
 

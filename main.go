@@ -20,7 +20,7 @@ import (
 
 const (
 	appName     = "NetProof"
-	appVersion  = "1.3.0"
+	appVersion  = "1.4.0"
 	defDataPort = 47800 // TCP + UDP: test traffic and control
 	defDiscPort = 47801 // UDP: LAN discovery broadcasts
 	defUIPort   = 47880 // HTTP on 127.0.0.1: the user interface
@@ -83,6 +83,7 @@ func main() {
 	go a.discoveryLoop()
 	go a.tailscaleLoop()
 	go a.practicePeerLoop()
+	go a.recentLoop()
 
 	uiURL, err := a.startUI(*uiPort)
 	if err != nil {

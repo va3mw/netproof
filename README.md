@@ -86,6 +86,13 @@ The expected profile is picked automatically from the adapters' link speed and t
 Wi-Fi, VPN, Tailscale 100.x addresses) and can be changed on the results screen. It also flags
 adapters stuck at 100 Mb/s or 10 Mb/s, half duplex, and lopsided up/down speeds.
 
+## Tested before
+
+NetProof remembers the last 10 computers it tested, and those that tested it, under
+"Tested before", with the last verdict and a green dot when NetProof is running there now.
+Saved in `%AppData%\NetProof\recent.json` (Windows) or `~/.config/NetProof/recent.json` (Linux).
+Click × to forget one.
+
 ## Names and Tailscale MagicDNS
 
 A typed name is resolved once at the start of the test (IPv4 preferred, so every part of the

@@ -175,6 +175,9 @@ func (a *App) runTest(parent context.Context, target string) (*Result, error) {
 		a.lastRes = res
 	}
 	a.mu.Unlock()
+	if err == nil && !res.Practice {
+		a.recent.add(Recent{Target: strings.TrimSpace(target), Host: res.RemoteHost, IP: res.RemoteIP, Verdict: res.Verdict})
+	}
 	return res, err
 }
 
