@@ -94,7 +94,7 @@ details summary{cursor:pointer;font-weight:600}
 <main>
   <header>
     <h1>Net<span>Proof</span></h1>
-    <div class="me" id="me"></div>
+    <div class="row" style="width:auto;gap:12px"><div class="me" id="me"></div><button class="ghost" id="quit" style="padding:6px 12px;font-size:13px">Quit NetProof</button></div>
   </header>
 
   <div id="updBanner" class="banner hide"></div>
@@ -403,6 +403,7 @@ async function poll(){
 }
 
 $("go").onclick = () => start($("target").value);
+$("quit").onclick = () => { if (confirm("Stop NetProof on this computer? Other computers will not be able to test with it until you start it again.")) api("/api/quit").catch(() => {}); };
 $("practice").onclick = () => start("127.0.0.1");
 $("target").addEventListener("keydown", e => { userTyped = true; if (e.key === "Enter") start($("target").value); });
 $("cancel").onclick = () => api("/api/cancel");

@@ -58,6 +58,7 @@ jobs:
             dist/netproof.exe dist/netproof-windows-arm64.exe \
             dist/netproof-linux-amd64 dist/netproof-linux-arm64 \
             dist/netproof-mac-arm64 dist/netproof-mac-intel \
+            dist/NetProof-mac.zip dist/netproof-mac-universal \
             "dist/NetProof second copy.bat" \
             dist/netproof-waveform-*.tar.gz \
             dist/netproof-update.json dist/netproof-update.json.sig

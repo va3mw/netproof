@@ -15,5 +15,10 @@ GOOS=linux   GOARCH=amd64 go build $S -o dist/netproof-linux-amd64 .
 GOOS=linux   GOARCH=arm64 go build $S -o dist/netproof-linux-arm64 .
 GOOS=darwin  GOARCH=arm64 go build $S -o dist/netproof-mac-arm64 .
 GOOS=darwin  GOARCH=amd64 go build $S -o dist/netproof-mac-intel .
+# macOS: NetProof.app with one universal program, zipped
+VERSION="$(sed -n 's/^var appVersion = "\(.*\)"$/\1/p' main.go)"
+go run ./tools/mkmacapp -version "$VERSION" -icon winres/icon.png \
+  -arm64 dist/netproof-mac-arm64 -amd64 dist/netproof-mac-intel \
+  -universal dist/netproof-mac-universal -out dist/NetProof-mac.zip
 cp "NetProof second copy.bat" dist/
 ls -l dist

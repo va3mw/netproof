@@ -56,6 +56,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
 	}
+	// Finder may add "-psn_0_12345" when it opens NetProof.app; it is not ours.
+	args := os.Args[:1]
+	for _, x := range os.Args[1:] {
+		if !strings.HasPrefix(x, "-psn_") {
+			args = append(args, x)
+		}
+	}
+	os.Args = args
 	flag.Parse()
 	if *second {
 		*port, *uiPort = secondDataPort, secondUIPort

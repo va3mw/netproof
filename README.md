@@ -21,8 +21,8 @@ suffer from problems an ordinary speed test never shows.
 
 ## Quick start
 
-1. Run NetProof on **both** computers: `netproof.exe` on Windows, `netproof-linux-amd64` on
-   Debian. A browser page opens by itself.
+1. Run NetProof on **both** computers: `netproof.exe` on Windows, `NetProof.app` on a Mac
+   (from `NetProof-mac.zip`), `netproof-linux-amd64` on Debian. A browser page opens by itself.
 2. On **one** of them, click **Test** next to the other computer's name. If it is not listed
    (VPN, Tailscale, another subnet), type its address or name and click **Start test**.
 3. Wait about 45 seconds. Both screens show the verdict and, if needed, a "How to fix it"
@@ -37,6 +37,14 @@ double-click `NetProof second copy.bat` next to `netproof.exe`) and test between
 
 **Windows:** the first time, Windows Firewall asks whether to allow NetProof. Tick **both**
 Private and Public and click **Allow**, or the other computer cannot reach this one.
+
+**Mac:** unzip `NetProof-mac.zip` and drag `NetProof.app` to Applications. It runs on Apple
+Silicon and Intel Macs (macOS 11 or newer). There is no Dock icon: the browser page is
+NetProof's window, and its **Quit NetProof** button stops it; opening the app again reopens the
+page. The first time, macOS refuses to open it because it is not signed by Apple yet: open
+**System Settings > Privacy & Security**, click **Open Anyway** next to the NetProof message, and
+confirm. Then allow NetProof to **find devices on local networks** and to **accept incoming
+connections** when asked. The zip includes these steps as a text file.
 
 **Debian:** `chmod +x netproof-linux-amd64` once. Without a desktop it just prints its addresses
 and answers tests. If `ufw` is on:
@@ -202,7 +210,9 @@ to flood a third party. Test durations and rates are capped.
   Windows Security > Virus & threat protection > Protection history > the NetProof entry >
   Actions > Allow on device, and report each release at
   https://www.microsoft.com/wdsi/filesubmission ("Software developer", "Incorrectly detected").
-- **Link speed on macOS** is not detected yet (`linkinfo_other.go`).
+- **macOS asks for "Open Anyway" the first time**, because NetProof is not signed and notarized
+  by Apple. That needs an Apple Developer ID (US$99 a year); signing and notarizing can then be
+  added to the release workflow. The Mac version has not been tried on a real Mac yet.
 - **Tailscale peer discovery through the Tailscale service on Windows** has not been tested on a
   real tailnet. Typing the peer's address or MagicDNS name always works.
 
@@ -215,7 +225,9 @@ Requires Go 1.22 or newer. No C compiler.
 ```
 
 Builds `dist/netproof.exe` (Windows x64), `dist/netproof-windows-arm64.exe`,
-`dist/netproof-linux-amd64`, `dist/netproof-linux-arm64` and both Mac builds.
+`dist/netproof-linux-amd64`, `dist/netproof-linux-arm64`, and for macOS `dist/NetProof-mac.zip`
+(NetProof.app with one universal program for Apple Silicon and Intel, made by
+`tools/mkmacapp` without any Apple tools) plus the separate Mac programs.
 
 ```bash
 ./build-waveform.sh
@@ -248,7 +260,7 @@ go-winres simply --arch amd64,arm64 --out rsrc --manifest cli --product-name Net
 | `mtu.go`, `dontfrag_*.go` | packet size (MTU) and fragmentation test |
 | `grade.go` | judging results and writing the findings |
 | `advice.go` | the "How to fix it" checklists |
-| `iface.go`, `linkinfo_*.go` | network connections, link speed, Wi-Fi and VPN detection |
+| `iface.go`, `linkinfo_*.go` | network connections, link speed, Wi-Fi and VPN detection (macOS: `networksetup` and `ifconfig`) |
 | `tailscale*.go` | Tailscale peers and MagicDNS names |
 | `radio.go` | reading a FlexRadio's name from its API |
 | `recent.go` | the "Tested before" list |
@@ -256,5 +268,6 @@ go-winres simply --arch amd64,arm64 --out rsrc --manifest cli --product-name Net
 | `version.go` | versions and feature negotiation between copies |
 | `update*.go` | signed self-update and updating the far end |
 | `tools/mkwaveform` | packs the FlexRadio waveform image |
+| `tools/mkmacapp` | NetProof.app and the universal Mac program |
 | `tools/release` | signing key and signed update manifest |
 | `.github/workflows/release.yml` | builds, signs and publishes a release from a tag |

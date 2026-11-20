@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -137,6 +138,14 @@ func (a *App) startUI(port int) (string, error) {
 			a.cancel()
 		}
 		a.mu.Unlock()
+		return nil
+	}))
+	mux.HandleFunc("/api/quit", a.post(func(map[string]string) error {
+		go func() {
+			time.Sleep(300 * time.Millisecond) // let the reply reach the page
+			fmt.Println("Stopped from the browser page.")
+			os.Exit(0)
+		}()
 		return nil
 	}))
 	mux.HandleFunc("/api/update", a.post(func(map[string]string) error {
