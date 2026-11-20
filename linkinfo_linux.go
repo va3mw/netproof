@@ -39,3 +39,6 @@ func osLinkInfo() map[string]osIfInfo {
 }
 
 func hideWindow(cmd *exec.Cmd) {}
+
+// openURL is only needed on Windows; other systems use a launcher command.
+func openURL(string) {}

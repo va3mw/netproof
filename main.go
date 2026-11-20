@@ -21,7 +21,7 @@ import (
 
 const (
 	appName     = "NetProof"
-	appVersion  = "1.1.0"
+	appVersion  = "1.1.1"
 	defDataPort = 47800 // TCP + UDP: test traffic and control
 	defDiscPort = 47801 // UDP: LAN discovery broadcasts
 	defUIPort   = 47880 // HTTP on 127.0.0.1: the user interface
@@ -160,7 +160,8 @@ func openBrowser(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		openURL(url) // ShellExecute, see linkinfo_windows.go
+		return
 	case "darwin":
 		cmd = exec.Command("open", url)
 	default:

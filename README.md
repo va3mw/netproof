@@ -21,6 +21,13 @@ its address; run the test from the other computer, or from the command line:
 `./netproof-linux-amd64 192.168.1.50`. If `ufw` is on: `sudo ufw allow 47800:47801/tcp` and
 `sudo ufw allow 47800:47801/udp`.
 
+**"Contains a virus or potentially unwanted software":** this is a false positive from
+Microsoft Defender, common for new, unsigned programs. NetProof avoids the usual triggers
+(no PowerShell, no rundll32, not stripped, full version info), but only code signing
+removes it for good. Until then: Windows Security > Virus & threat protection > Protection
+history > select the NetProof entry > Actions > Allow / Restore. Report the false positive at
+https://www.microsoft.com/wdsi/filesubmission ("Software developer", "Incorrectly detected").
+
 ## Practising on one computer
 
 Two ways, so new users can get used to it before involving a second machine:
@@ -69,5 +76,5 @@ TCP + UDP 47800 (tests), UDP 47801 (LAN discovery broadcast), 127.0.0.1:47880 (l
 
 ## Building
 
-Requires Go 1.22+. `./build.sh` produces everything in `dist/`. Mac: `GOOS=darwin GOARCH=arm64 go build`
+Requires Go 1.22+. Windows icon and version info: `go-winres simply --arch amd64,arm64 --out rsrc --manifest cli --product-name NetProof --product-version X.Y.Z.0 --file-version X.Y.Z.0 --icon winres/icon.png` (from github.com/tc-hib/go-winres). `./build.sh` produces everything in `dist/`. Mac: `GOOS=darwin GOARCH=arm64 go build`
 already works; link speed detection on Mac is still a stub (`linkinfo_other.go`).
