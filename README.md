@@ -1,76 +1,78 @@
 # NetProof
 
-Network speed, delay and jitter tester that anyone can run. One file, nothing to install.
+A network tester that anyone can run. It measures speed, delay, jitter, packet loss and packet
+size between two computers, or between a computer and a FlexRadio, and says in plain language
+whether you would notice a problem and how to fix it. One file, nothing to install.
 
-## For users
+Built for ham radio operators, whose remote audio, panadapter and SDR streams are UDP and
+suffer from problems an ordinary speed test never shows.
 
-1. Run NetProof on **both** computers (`netproof.exe` on Windows, `./netproof-linux-amd64` on Debian).
-   A browser window opens by itself.
-2. On **one** of them, click **Test** next to the other computer's name.
-   If it is not listed (VPN, Tailscale, another subnet), type its address or name and click **Start test**.
-   Tailscale MagicDNS names work: `boathouse2` or `boathouse2.tail1234.ts.net`.
-3. Wait about 45 seconds. Both screens show the verdict and a "How to fix it" checklist.
+- [Quick start](#quick-start)
+- [What it measures](#what-it-measures)
+- [How results are judged](#how-results-are-judged)
+- [Features](#features)
+- [Running inside a FlexRadio](#running-inside-a-flexradio)
+- [Command line](#command-line)
+- [Ports and security](#ports-and-security)
+- [Known issues](#known-issues)
+- [Building](#building)
+- [Project layout](#project-layout)
 
-You do not need to choose "client" or "server". Whichever computer presses Test drives the test;
-the other one answers automatically.
+## Quick start
 
-**Windows:** the first time, Windows Firewall asks whether to allow NetProof. Tick **both** Private
-and Public and click **Allow**. If you skip this, the other computer cannot reach this one.
+1. Run NetProof on **both** computers: `netproof.exe` on Windows, `netproof-linux-amd64` on
+   Debian. A browser page opens by itself.
+2. On **one** of them, click **Test** next to the other computer's name. If it is not listed
+   (VPN, Tailscale, another subnet), type its address or name and click **Start test**.
+3. Wait about 45 seconds. Both screens show the verdict and, if needed, a "How to fix it"
+   checklist.
 
-**Debian:** `chmod +x netproof-linux-amd64` once. On a machine with no desktop, it just prints
-its address; run the test from the other computer, or from the command line:
-`./netproof-linux-amd64 192.168.1.50`. If `ufw` is on: `sudo ufw allow 47800:47801/tcp` and
-`sudo ufw allow 47800:47801/udp`.
+There is no client or server to choose. Whichever computer presses Test drives the test; the
+other one answers automatically.
 
-**"Contains a virus or potentially unwanted software":** this is a false positive from
-Microsoft Defender, common for new, unsigned programs. NetProof avoids the usual triggers
-(no PowerShell, no rundll32, not stripped, full version info), but only code signing
-removes it for good. Until then: Windows Security > Virus & threat protection > Protection
-history > select the NetProof entry > Actions > Allow / Restore. Report the false positive at
-https://www.microsoft.com/wdsi/filesubmission ("Software developer", "Incorrectly detected").
+**New users** can try it on one computer first: click **Practice run** (the computer tests
+itself, nothing is graded), or start a second copy with `netproof --second` (on Windows,
+double-click `NetProof second copy.bat` next to `netproof.exe`) and test between the two windows.
 
-## Practising on one computer
+**Windows:** the first time, Windows Firewall asks whether to allow NetProof. Tick **both**
+Private and Public and click **Allow**, or the other computer cannot reach this one.
 
-Two ways, so new users can get used to it before involving a second machine:
+**Debian:** `chmod +x netproof-linux-amd64` once. Without a desktop it just prints its addresses
+and answers tests. If `ufw` is on:
 
-* **Practice run button.** Start NetProof and click **Practice run**. It tests the computer
-  against itself. Results are shown but not graded, because no network is involved.
-* **Two copies side by side.** Start NetProof normally, then start a second copy with
-  `netproof --second` (on Windows, double-click `NetProof second copy.bat` placed next to
-  `netproof.exe`). The two copies list each other as "first copy" and "second copy" under
-  "This computer"; press **Test** in either window and watch both screens, just like a real test.
-  The second copy uses ports 47810 and 47890.
+```bash
+sudo ufw allow 47800:47801/tcp
+```
 
-## What it measures (about 45 s total)
+```bash
+sudo ufw allow 47800:47801/udp
+```
+
+## What it measures
+
+About 45 seconds in total.
 
 | Phase | Time | How |
 |---|---|---|
 | Delay, jitter, loss | 6 s | 300 small UDP probes (falls back to TCP if UDP is blocked) |
-| Packet size (MTU) | ~1 s | largest UDP packet that crosses unsplit (Don't Fragment), and whether split packets get through |
+| Packet size (MTU) | ~1 s | largest UDP packet that crosses in one piece (Don't Fragment, exact to the byte), and whether packets that must be split still arrive |
 | Download | 10 s | 4 parallel TCP streams, far end to this end, first second ignored |
-| Upload | 10 s | same, other direction, measured at the receiving end |
-| Busy delay | during both | 10 probes/s while the link is full (bufferbloat) |
-| UDP stream in | 8 s | steady 1200 byte UDP packets at a fixed rate, like radio audio, panadapter and IQ streams: loss, one-way jitter, out of order |
-| UDP stream out | 8 s | same, other direction |
+| Upload | 10 s | the same, other direction, measured at the receiving end |
+| Busy delay | during both | 10 probes a second while the link is full (bufferbloat) |
+| UDP stream in | 8 s | a steady stream of 1200 byte UDP packets at a fixed rate, like radio audio, panadapter and IQ data: loss, one-way jitter, out-of-order packets, delivered rate |
+| UDP stream out | 8 s | the same, other direction |
 
-UDP stream rate: 100 Mb/s on a gigabit LAN, 30 Mb/s on 100 Mb or Wi-Fi, 10 Mb/s over a VPN,
-never more than 70% of the TCP speed just measured (so a slow link is tested for loss, not overrun).
-A computer only streams to an address that has just connected to it over TCP.
-
-## Diagnosis
-
-Every problem found comes with a "How to fix it" checklist in plain language: link stuck at
-100 Mb/s, duplex, packet loss on a wired LAN (cables, RF pickup, switches), slow LAN, Wi-Fi,
-bufferbloat (SQM / cake / fq_codel), jitter, VPN path (relays, Tailscale DERP), MTU and
-fragmentation (MSS clamping, tunnel MTU), and UDP blocked by firewalls. The checklists are also
-in the saved and copied text report.
+The UDP stream runs at 100 Mb/s on a gigabit LAN, 30 Mb/s on 100 Mb/s or Wi-Fi and 10 Mb/s over
+a VPN, never more than 70% of the TCP speed just measured, so a slow link is tested for loss
+rather than simply overrun.
 
 ## How results are judged
 
 NetProof only calls something out when a person would actually hear or feel it. Findings are
 grouped as **You will notice** (the only thing that makes the verdict "problems"), **You may
-notice**, and **Good to know**, and each one says what you will experience first (clicks and
-dropouts, laggy remote control, slow file copies) and the numbers second.
+notice** and **Good to know**. Each says what you will experience first (clicks and dropouts,
+laggy remote control, slow file copies) and the numbers second, and every problem you would
+notice comes with a "How to fix it" checklist.
 
 | | Healthy 100 Mb/s LAN | Healthy 1 Gb/s LAN | Healthy VPN | You may notice | You will notice |
 |---|---|---|---|---|---|
@@ -81,31 +83,133 @@ dropouts, laggy remote control, slow file copies) and the numbers second.
 | Extra delay when busy | < 20 ms | < 10 ms | < 30 ms | > 50 ms (LAN: > 100 ms) | > 150 ms (never on a LAN) |
 | Largest packet (MTU) | 1500 | 1500 | 1280 to 1420 | < 1280 | |
 
-Only speed depends on the kind of link. Delay, jitter, loss and busy delay use the same
-"would you notice" limits everywhere: audio stutters the same whether jitter came from Wi-Fi or
-a VPN. If one computer is gigabit and the other is stuck at 100 Mb/s, Automatic judges the link
-as gigabit and points at the slow end.
+A wired link never reaches its label speed: about 6% goes to Ethernet, IP and TCP headers. Only
+speed depends on the kind of link; the other limits are the same everywhere, because audio
+stutters the same whether the jitter came from Wi-Fi or a VPN.
 
-## Tested before
+**Which kind of link?** Leave "What kind of connection is this?" on Automatic, or pick one.
+Automatic uses the adapters' type and link speed, Tailscale addresses, whether the other
+computer is on the same subnet, and the delay. A site-to-site VPN between two wired PCs is
+recognised as a VPN; a gigabit PC paired with one stuck at 100 Mb/s is judged as gigabit, with
+the slow end named as the problem.
 
-NetProof remembers the last 10 computers it tested, and those that tested it, under
-"Tested before", with the last verdict and a green dot when NetProof is running there now.
-Saved in `%AppData%\NetProof\recent.json` (Windows) or `~/.config/NetProof/recent.json` (Linux).
-Click × to forget one.
+The "How to fix it" checklists cover adapters stuck at 100 Mb/s, duplex, packet loss on a wired
+LAN (cables, RF pickup, switches), slow LANs, Wi-Fi, bufferbloat (LAN and internet advice
+differ), jitter (including raising the radio software's buffer), VPN paths (relays, Tailscale
+DERP), MTU and fragmentation (tunnel MTU, MSS clamping) and UDP blocked by firewalls. They are
+also in the saved and copied text report.
 
-## Names and Tailscale MagicDNS
+## Features
 
-A typed name is resolved once at the start of the test (IPv4 preferred, so every part of the
-test takes the same path). If the computer's DNS does not know the name, NetProof looks it up in
-Tailscale itself (short MagicDNS name, full `.ts.net` name or Tailscale host name), so MagicDNS
-names work even when "Use Tailscale DNS" is off or on Linux without Tailscale DNS. Tailscale
-peers running NetProof are listed automatically with their MagicDNS names.
+- **Finds other computers by itself**: on the LAN by broadcast, and on Tailscale by asking
+  Tailscale which peers are online and checking which run NetProof. FlexRadios running the
+  NetProof waveform show up with a **Radio** tag.
+- **Tested before**: the last 10 computers tested, or that tested this one, with their last
+  result and a green dot when NetProof is running there now. Saved in
+  `%AppData%\NetProof\recent.json` (Windows) or `~/.config/NetProof/recent.json` (Linux).
+- **Pick the network connection** when a computer has several (Ethernet, Wi-Fi, Tailscale,
+  other VPNs).
+- **Names and Tailscale MagicDNS**: type `boathouse2` or `boathouse2.tail1234.ts.net`. The name is
+  resolved once, IPv4 first, so every part of the test takes the same path; if the computer's DNS
+  does not know it, NetProof asks Tailscale directly.
+- **Both screens show the result**: the computer that was tested shows the same report.
+- **Copy or save the report** as plain text, for email or a support ticket.
 
-## Ports
+## Running inside a FlexRadio
 
-TCP + UDP 47800 (tests), UDP 47801 (LAN discovery broadcast), 127.0.0.1:47880 (local browser UI only).
+FLEX-8000 series and Aurora radios can run NetProof as a Docker waveform. The radio then answers
+tests by itself and appears on the LAN as, for example, **FLEX-8600 Shack (VA3MW)**, so you
+test the path between your PC and the radio itself. See **[WAVEFORM.md](WAVEFORM.md)** for
+installing, testing and building it.
+
+## Command line
+
+```bash
+netproof 192.168.1.50
+```
+
+Runs a test without the browser page and prints the report.
+
+| Option | Meaning |
+|---|---|
+| `--profile auto\|1g\|100m\|wifi\|vpn` | what kind of link to judge against |
+| `--bind <ip>` | test from this local address (network connection) |
+| `--no-browser` | do not open the browser page |
+| `--second` | a second copy on the same computer, for practice (ports 47810 and 47890) |
+| `--responder` | answer tests only, no page (servers, and inside a FlexRadio) |
+| `--name <text>` | name to announce instead of the computer name |
+| `--max-mbps <n>` | responder: testers keep their traffic under this many Mb/s |
+
+## Ports and security
+
+| Port | Use |
+|---|---|
+| TCP + UDP 47800 | tests |
+| UDP 47801 | LAN discovery broadcast |
+| TCP 127.0.0.1:47880 | the browser page, on this computer only |
+
+The browser page only answers this computer, and refuses requests from other web sites. Test
+traffic is only sent to an address that has just connected over TCP, so NetProof cannot be used
+to flood a third party. Test durations and rates are capped.
+
+## Known issues
+
+- **Windows Defender may flag netproof.exe** as `Trojan:Win32/Bearfoos.A!ml` or similar, mostly
+  on Windows 10. This is a machine-learning false positive common to new, unsigned programs.
+  NetProof avoids the usual triggers (the Windows build never starts other programs, no
+  PowerShell, full version information), but only code signing fixes it for good. Until then:
+  Windows Security > Virus & threat protection > Protection history > the NetProof entry >
+  Actions > Allow on device, and report each release at
+  https://www.microsoft.com/wdsi/filesubmission ("Software developer", "Incorrectly detected").
+- **Link speed on macOS** is not detected yet (`linkinfo_other.go`).
+- **Tailscale peer discovery through the Tailscale service on Windows** has not been tested on a
+  real tailnet. Typing the peer's address or MagicDNS name always works.
 
 ## Building
 
-Requires Go 1.22+. Windows icon and version info: `go-winres simply --arch amd64,arm64 --out rsrc --manifest cli --product-name NetProof --product-version X.Y.Z.0 --file-version X.Y.Z.0 --icon winres/icon.png` (from github.com/tc-hib/go-winres). `./build.sh` produces everything in `dist/`. Mac: `GOOS=darwin GOARCH=arm64 go build`
-already works; link speed detection on Mac is still a stub (`linkinfo_other.go`).
+Requires Go 1.22 or newer. No C compiler.
+
+```bash
+./build.sh
+```
+
+Builds `dist/netproof.exe` (Windows x64), `dist/netproof-windows-arm64.exe`,
+`dist/netproof-linux-amd64`, `dist/netproof-linux-arm64` and both Mac builds.
+
+```bash
+./build-waveform.sh
+```
+
+Builds the FlexRadio waveform; see [WAVEFORM.md](WAVEFORM.md).
+
+```bash
+go test ./...
+```
+
+Runs the tests, including the grading of real recorded results.
+
+Windows version information and the icon are in `rsrc_windows_*.syso`. After changing the
+version in `main.go`, regenerate them with
+[go-winres](https://github.com/tc-hib/go-winres):
+
+```bash
+go-winres simply --arch amd64,arm64 --out rsrc --manifest cli --product-name NetProof --file-description "NetProof network speed and jitter tester" --product-version X.Y.Z.0 --file-version X.Y.Z.0 --original-filename netproof.exe --copyright "Copyright 2026 NetProof" --icon winres/icon.png
+```
+
+## Project layout
+
+| File | What it does |
+|---|---|
+| `main.go` | start-up, options, responder mode |
+| `server.go` | answering tests, LAN discovery, peers |
+| `client.go` | running a test: delay, TCP speed, latency under load |
+| `udpstream.go` | the fixed-rate UDP stream test |
+| `mtu.go`, `dontfrag_*.go` | packet size (MTU) and fragmentation test |
+| `grade.go` | judging results and writing the findings |
+| `advice.go` | the "How to fix it" checklists |
+| `iface.go`, `linkinfo_*.go` | network connections, link speed, Wi-Fi and VPN detection |
+| `tailscale*.go` | Tailscale peers and MagicDNS names |
+| `radio.go` | reading a FlexRadio's name from its API |
+| `recent.go` | the "Tested before" list |
+| `ui.go`, `web/index.html` | the browser page |
+| `tools/mkwaveform` | packs the FlexRadio waveform image |

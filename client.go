@@ -126,7 +126,7 @@ func (a *App) hello(host string, port int, timeout time.Duration) (*HelloReply, 
 }
 
 func (a *App) helloOp(ctx context.Context, host string, port int, op string) (*HelloReply, error) {
-	c, br, err := a.dialOp(ctx, host, port, Request{Op: op, FromHost: a.host})
+	c, br, err := a.dialOp(ctx, host, port, Request{Op: op, FromHost: a.hostName()})
 	if err != nil {
 		return nil, err
 	}
@@ -207,6 +207,10 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 		return nil, fmt.Errorf("could not reach NetProof on %s. Make sure NetProof is running on that computer, the address is right, and the firewall allows it (%v)", where, err)
 	}
 	self := h.ID == a.id
+	a.mu.Lock()
+	a.capMbps = h.MaxMbps
+	a.mu.Unlock()
+	defer func() { a.mu.Lock(); a.capMbps = 0; a.mu.Unlock() }()
 	if h.Busy && !self {
 		return nil, fmt.Errorf("%s is busy running its own test. Try again in a moment", h.Host)
 	}
@@ -219,13 +223,20 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 	r := &Result{
 		Time:       time.Now().Format("2006-01-02 15:04:05"),
 		Version:    appVersion,
-		LocalHost:  a.host,
+		LocalHost:  a.hostName(),
 		RemoteHost: h.Host,
 		RemoteIP:   host,
 		RemoteName: typedName,
 		RemoteOS:   h.OS,
 		RemoteKind: h.Kind, RemoteIface: h.Iface, RemoteLinkMbps: h.LinkMbps, RemoteDuplex: h.Duplex,
-		Practice: practice,
+		Practice:    practice,
+		RateCapMbps: h.MaxMbps,
+	}
+	if h.Radio != nil {
+		r.RemoteRadio = h.Radio.Model
+		if r.RemoteRadio == "" {
+			r.RemoteRadio = "FlexRadio"
+		}
 	}
 	if practice {
 		r.RemoteHost = h.Host + " (itself)"
@@ -272,13 +283,13 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 	}
 
 	// 2. Download (far end sends to us), with a slow latency probe alongside.
-	a.setPhase("download", "Download test ("+h.Host+" → "+a.host+")")
+	a.setPhase("download", "Download test ("+h.Host+" → "+a.hostName()+")")
 	r.DownMbps, r.DownLoadedRTT, err = a.throughputWithProbe(ctx, host, port, "download", lat.method)
 	if err != nil {
 		return nil, err
 	}
 	// 3. Upload.
-	a.setPhase("upload", "Upload test ("+a.host+" → "+h.Host+")")
+	a.setPhase("upload", "Upload test ("+a.hostName()+" → "+h.Host+")")
 	r.UpMbps, r.UpLoadedRTT, err = a.throughputWithProbe(ctx, host, port, "upload", lat.method)
 	if err != nil {
 		return nil, err
@@ -295,24 +306,27 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 		streamProf, _ = r.autoProfile()
 	}
 	r.UDPRateMbps = udpRateFor(streamProf, r.DownMbps, r.UpMbps)
+	if h.MaxMbps > 0 && r.UDPRateMbps > h.MaxMbps {
+		r.UDPRateMbps = h.MaxMbps
+	}
 	if lat.method != "UDP" {
 		r.UDPNote = "UDP is blocked between these computers, so the UDP stream test could not run. Ham radio audio and SDR streams will not work through this path either."
 	} else {
-		a.setPhase("udpdown", fmt.Sprintf("UDP stream %s → %s at %s Mb/s", h.Host, a.host, f1(r.UDPRateMbps)))
+		a.setPhase("udpdown", fmt.Sprintf("UDP stream %s → %s at %s Mb/s", h.Host, a.hostName(), f1(r.UDPRateMbps)))
 		if st, err := a.udpStreamDown(ctx, host, port, r.UDPRateMbps); err == nil {
 			r.UDPDown = st
 		} else if ctx.Err() != nil {
 			return nil, ctx.Err()
 		} else {
-			r.UDPNote = "UDP stream " + h.Host + " → " + a.host + ": " + err.Error()
+			r.UDPNote = "UDP stream " + h.Host + " → " + a.hostName() + ": " + err.Error()
 		}
-		a.setPhase("udpup", fmt.Sprintf("UDP stream %s → %s at %s Mb/s", a.host, h.Host, f1(r.UDPRateMbps)))
+		a.setPhase("udpup", fmt.Sprintf("UDP stream %s → %s at %s Mb/s", a.hostName(), h.Host, f1(r.UDPRateMbps)))
 		if st, err := a.udpStreamUp(ctx, host, port, r.UDPRateMbps); err == nil {
 			r.UDPUp = st
 		} else if ctx.Err() != nil {
 			return nil, ctx.Err()
 		} else {
-			r.UDPNote = strings.TrimSpace(r.UDPNote + " UDP stream " + a.host + " → " + h.Host + ": " + err.Error())
+			r.UDPNote = strings.TrimSpace(r.UDPNote + " UDP stream " + a.hostName() + " → " + h.Host + ": " + err.Error())
 		}
 	}
 
@@ -323,7 +337,7 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 		return r, nil
 	}
 	rctx, rcancel := context.WithTimeout(ctx, 3*time.Second)
-	if c, br, err := a.dialOp(rctx, host, port, Request{Op: "report", FromHost: a.host, Result: r}); err == nil {
+	if c, br, err := a.dialOp(rctx, host, port, Request{Op: "report", FromHost: a.hostName(), Result: r}); err == nil {
 		_ = c.SetDeadline(time.Now().Add(3 * time.Second))
 		_, _ = br.ReadString('\n')
 		c.Close()
@@ -367,7 +381,7 @@ func (a *App) throughput(ctx context.Context, host string, port int, dir string)
 		}
 	}()
 	for i := 0; i < streams; i++ {
-		c, br, err := a.dialOp(ctx, host, port, Request{Op: dir, DurationMs: int(throughDur / time.Millisecond), FromHost: a.host})
+		c, br, err := a.dialOp(ctx, host, port, Request{Op: dir, DurationMs: int(throughDur / time.Millisecond), FromHost: a.hostName()})
 		if err != nil {
 			return 0, fmt.Errorf("could not open test connection: %v", err)
 		}
@@ -411,13 +425,19 @@ func (a *App) throughput(ctx context.Context, host string, port int, dir string)
 			_, _ = rand.Read(buf)
 			end := start.Add(throughDur)
 			_ = c.SetWriteDeadline(end.Add(10 * time.Second))
+			a.mu.Lock()
+			perStream := a.capMbps / streams
+			a.mu.Unlock()
+			var sent int64
 			for time.Now().Before(end) {
 				n, err := c.Write(buf)
 				live.Add(int64(n))
+				sent += int64(n)
 				if err != nil {
 					errs[i] = err
 					return
 				}
+				pace(start, sent, perStream)
 			}
 			if tc, ok := c.(*net.TCPConn); ok {
 				_ = tc.CloseWrite()

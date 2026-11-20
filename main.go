@@ -15,12 +15,13 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
 const (
 	appName     = "NetProof"
-	appVersion  = "1.5.0"
+	appVersion  = "1.6.0"
 	defDataPort = 47800 // TCP + UDP: test traffic and control
 	defDiscPort = 47801 // UDP: LAN discovery broadcasts
 	defUIPort   = 47880 // HTTP on 127.0.0.1: the user interface
@@ -40,6 +41,10 @@ func main() {
 	discPort := flag.Int("discovery-port", defDiscPort, "LAN discovery port (UDP)")
 	uiPort := flag.Int("ui-port", defUIPort, "web interface port on 127.0.0.1")
 	second := flag.Bool("second", false, "run a second copy on this computer, for practice")
+	responder := flag.Bool("responder", os.Getenv("NETPROOF_RESPONDER") == "1", "answer tests only: no window (for servers and inside a FlexRadio)")
+	name := flag.String("name", os.Getenv("NETPROOF_NAME"), "name to announce (default: computer name, or the radio's model, nickname and callsign)")
+	radioAddr := flag.String("radio", os.Getenv("SSDR_RADIO_ADDRESS"), "FlexRadio API address to read the radio's name from (set by the radio)")
+	maxMbps := flag.Float64("max-mbps", envFloat("NETPROOF_MAX_MBPS"), "responder: keep test traffic from other computers under this many Mb/s (0 = no limit)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "%s %s: network speed, latency and jitter tester\n\n", appName, appVersion)
 		fmt.Fprintf(os.Stderr, "Usage:\n  netproof                 start and open the browser window (normal use)\n")
@@ -59,6 +64,10 @@ func main() {
 
 	a := newApp(*listen, *port, *discPort)
 	a.profile = *profile
+	if *name != "" {
+		a.host = *name
+	}
+	a.maxMbps = *maxMbps
 	if *bind != "" {
 		a.bindIP = *bind
 	}
@@ -66,6 +75,10 @@ func main() {
 	// Command line mode: netproof <target>
 	if flag.NArg() > 0 {
 		os.Exit(a.runCLI(flag.Arg(0)))
+	}
+	// Inside a FlexRadio (the radio sets SSDR_RADIO_ADDRESS) or on a server.
+	if *responder || *radioAddr != "" {
+		os.Exit(a.runResponder(*radioAddr, *name))
 	}
 
 	if err := a.startServers(); err != nil {
@@ -93,14 +106,14 @@ func main() {
 	}
 
 	fmt.Println("==========================================================")
-	fmt.Printf(" %s %s is running on %s\n", appName, appVersion, a.host)
+	fmt.Printf(" %s %s is running on %s\n", appName, appVersion, a.hostName())
 	fmt.Println("")
 	fmt.Println(" Open this in your web browser if it did not open itself:")
 	fmt.Println("   " + uiURL)
 	fmt.Println("")
 	if *second {
 		fmt.Println(" This is the SECOND (practice) copy. The first copy will list it")
-		fmt.Println(" as \"" + a.host + " (second copy)\". Press Test there.")
+		fmt.Println(" as \"" + a.hostName() + " (second copy)\". Press Test there.")
 	} else {
 		fmt.Println(" Run NetProof on the other computer too, then press Test.")
 		fmt.Println(" Just practising? Press \"Practice run\" in the browser window.")
@@ -114,10 +127,43 @@ func main() {
 		openBrowser(uiURL)
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-	<-sig
+	waitForStop()
 	fmt.Println("\nStopped.")
+}
+
+func waitForStop() {
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM) // Ctrl+C, or "docker stop"
+	<-sig
+}
+
+// runResponder answers tests from other computers and announces itself on
+// the LAN, with no window. This is what runs inside a FlexRadio.
+func (a *App) runResponder(radioAddr, fixedName string) int {
+	if err := a.startServers(); err != nil {
+		fmt.Fprintln(os.Stderr, "Could not start:", err)
+		return 1
+	}
+	go a.discoveryLoop()
+	if radioAddr != "" {
+		go a.radioLoop(radioAddr, fixedName)
+	}
+	limit := "no speed limit"
+	if a.maxMbps > 0 {
+		limit = "test traffic limited to " + mbps(a.maxMbps)
+	}
+	fmt.Printf("%s %s responder on %s: answering tests on port %d, %s\n", appName, appVersion, a.hostName(), a.port, limit)
+	if radioAddr != "" {
+		fmt.Printf("Running inside a FlexRadio (API at %s); the name updates once the radio API answers\n", radioAddr)
+	}
+	waitForStop()
+	fmt.Println("Stopped.")
+	return 0
+}
+
+func envFloat(k string) float64 {
+	v, _ := strconv.ParseFloat(strings.TrimSpace(os.Getenv(k)), 64)
+	return v
 }
 
 func (a *App) runCLI(target string) int {

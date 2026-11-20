@@ -55,7 +55,7 @@ func (a *App) startUI(port int) (string, error) {
 	})
 	mux.HandleFunc("/api/ping", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, appName) })
 	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
-		st := uiState{App: appName, Version: appVersion, Host: a.host, OS: runtime.GOOS,
+		st := uiState{App: appName, Version: appVersion, Host: a.hostName(), OS: runtime.GOOS,
 			Interfaces: a.interfaces(), Peers: a.peerList(), Recent: a.recent.snapshot(), Test: a.snapshotTest()}
 		for _, k := range profileOrder {
 			st.Profiles = append(st.Profiles, profiles[k])

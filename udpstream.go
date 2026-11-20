@@ -440,3 +440,15 @@ func udpRateFor(profile string, downMbps, upMbps float64) float64 {
 	}
 	return math.Round(rate*10) / 10
 }
+
+// pace sleeps just long enough to keep "sent" bytes since start at or below
+// mbps (0 = no limit). Used when the far end is a radio with a speed limit.
+func pace(start time.Time, sent int64, mbps float64) {
+	if mbps <= 0 {
+		return
+	}
+	due := time.Duration(float64(sent) * 8 / (mbps * 1e6) * float64(time.Second))
+	if wait := due - time.Since(start); wait > 0 {
+		time.Sleep(wait)
+	}
+}

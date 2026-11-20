@@ -226,7 +226,7 @@ function renderIfaces(){
 
 function renderPeers(){
   const ps = S.peers || [];
-  const fp = JSON.stringify(ps.map(p=>[p.addr,p.host,p.via])) + S.test.running;
+  const fp = JSON.stringify(ps.map(p=>[p.addr,p.host,p.via,p.radio])) + S.test.running;
   if (fp === lastFp) return;
   lastFp = fp;
   if (!ps.length){
@@ -235,7 +235,7 @@ function renderPeers(){
   }
   $("peers").innerHTML = ps.map(p => `
     <div class="peer">
-      <div class="n"><b>${esc(p.host)}<span class="tag">${esc(p.via)}</span></b><small>${p.dns ? esc(p.dns) + " &middot; " : ""}${esc(p.addr)} &middot; ${esc(p.os)}</small></div>
+      <div class="n"><b>${esc(p.host)}<span class="tag">${esc(p.via)}</span>${p.radio ? `<span class="tag">Radio</span>` : ""}</b><small>${p.dns ? esc(p.dns) + " &middot; " : ""}${esc(p.addr)} &middot; ${esc(p.os)}</small></div>
       <button data-addr="${esc(p.addr)}" ${S.test.running ? "disabled" : ""}>Test</button>
     </div>`).join("");
   for (const b of $("peers").querySelectorAll("button")) b.onclick = () => start(b.dataset.addr);

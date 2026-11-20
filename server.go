@@ -32,17 +32,19 @@ type Request struct {
 
 // HelloReply describes the far end.
 type HelloReply struct {
-	Magic    string `json:"magic"`
-	ID       string `json:"id"`
-	App      string `json:"app"`
-	Version  string `json:"version"`
-	Host     string `json:"host"`
-	OS       string `json:"os"`
-	Busy     bool   `json:"busy"`
-	Iface    string `json:"iface"`
-	Kind     string `json:"kind"`
-	LinkMbps int    `json:"linkMbps"`
-	Duplex   string `json:"duplex,omitempty"`
+	Magic    string     `json:"magic"`
+	ID       string     `json:"id"`
+	Radio    *RadioInfo `json:"radio,omitempty"`   // the far end is a FlexRadio
+	MaxMbps  float64    `json:"maxMbps,omitempty"` // keep test traffic under this
+	App      string     `json:"app"`
+	Version  string     `json:"version"`
+	Host     string     `json:"host"`
+	OS       string     `json:"os"`
+	Busy     bool       `json:"busy"`
+	Iface    string     `json:"iface"`
+	Kind     string     `json:"kind"`
+	LinkMbps int        `json:"linkMbps"`
+	Duplex   string     `json:"duplex,omitempty"`
 }
 
 type UploadReply struct {
@@ -57,8 +59,9 @@ type Peer struct {
 	IP       string    `json:"ip"`
 	Host     string    `json:"host"`
 	OS       string    `json:"os"`
-	Via      string    `json:"via"`           // "LAN" or "Tailscale"
-	DNS      string    `json:"dns,omitempty"` // MagicDNS name
+	Via      string    `json:"via"`             // "LAN" or "Tailscale"
+	DNS      string    `json:"dns,omitempty"`   // MagicDNS name
+	Radio    string    `json:"radio,omitempty"` // FlexRadio model, if it is one
 	LastSeen time.Time `json:"-"`
 }
 
@@ -87,6 +90,10 @@ type App struct {
 	incoming *Incoming
 	lastRes  *Result
 	recent   recentStore
+
+	radio   *RadioInfo // set when running inside a FlexRadio
+	maxMbps float64    // responder side: speed limit testers must respect (0 = none)
+	capMbps float64    // client side, during a test: the far end's limit
 
 	us udpServer // UDP stream test state
 
@@ -194,9 +201,10 @@ func readJSONLine(br *bufio.Reader, v any, max int) error {
 }
 
 func (a *App) helloReply(local net.Addr) HelloReply {
-	r := HelloReply{Magic: magic, ID: a.id, App: appName, Version: appVersion, Host: a.host, OS: runtime.GOOS}
+	r := HelloReply{Magic: magic, ID: a.id, App: appName, Version: appVersion, Host: a.hostName(), OS: runtime.GOOS}
 	a.mu.Lock()
 	r.Busy = a.test.Running
+	r.Radio, r.MaxMbps = a.radio, a.maxMbps
 	a.mu.Unlock()
 	if ta, ok := local.(*net.TCPAddr); ok {
 		if ifc, ok := a.ifaceForIP(ta.IP.String()); ok {
@@ -270,12 +278,20 @@ func (a *App) handle(c net.Conn) {
 		tuneTCP(c)
 		buf := make([]byte, 128*1024)
 		_, _ = rand.Read(buf)
-		end := time.Now().Add(dur)
+		start := time.Now()
+		end := start.Add(dur)
 		_ = c.SetWriteDeadline(end.Add(5 * time.Second))
+		a.mu.Lock()
+		perStream := a.maxMbps / streams
+		a.mu.Unlock()
+		var sent int64
 		for time.Now().Before(end) {
-			if _, err := c.Write(buf); err != nil {
+			n, err := c.Write(buf)
+			if err != nil {
 				return
 			}
+			sent += int64(n)
+			pace(start, sent, perStream)
 		}
 
 	case "upload": // they send, we receive and report what actually arrived
@@ -342,6 +358,15 @@ type announce struct {
 	Host  string `json:"host"`
 	OS    string `json:"os"`
 	Port  int    `json:"port"`
+	Radio string `json:"radio,omitempty"` // model, when this is a FlexRadio
+}
+
+// hostName is the name this copy announces; inside a radio it changes once
+// the radio API answers.
+func (a *App) hostName() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.host
 }
 
 // discoveryLoop broadcasts "I'm here" on every LAN and listens for others.
@@ -369,11 +394,20 @@ func (a *App) discoveryLoop() {
 			if an.Port != 0 && an.Port != defDataPort {
 				addr = net.JoinHostPort(ip, fmt.Sprint(an.Port))
 			}
-			a.addPeer(&Peer{ID: an.ID, Addr: addr, IP: ip, Host: an.Host, OS: an.OS, Via: "LAN"})
+			a.addPeer(&Peer{ID: an.ID, Addr: addr, IP: ip, Host: an.Host, OS: an.OS, Via: "LAN", Radio: an.Radio})
 		}
 	}()
-	msg, _ := json.Marshal(announce{Magic: magic, ID: a.id, Host: a.host, OS: runtime.GOOS, Port: a.port})
 	for {
+		an := announce{Magic: magic, ID: a.id, Host: a.hostName(), OS: runtime.GOOS, Port: a.port}
+		a.mu.Lock()
+		if a.radio != nil {
+			an.Radio = a.radio.Model
+			if an.Radio == "" {
+				an.Radio = "FlexRadio"
+			}
+		}
+		a.mu.Unlock()
+		msg, _ := json.Marshal(an)
 		targets := map[string]bool{"255.255.255.255": true}
 		for _, b := range broadcastAddrs() {
 			targets[b] = true

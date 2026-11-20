@@ -83,6 +83,7 @@ type Result struct {
 	RemoteKind     string `json:"remoteKind"`
 	RemoteLinkMbps int    `json:"remoteLinkMbps"`
 	RemoteDuplex   string `json:"remoteDuplex,omitempty"`
+	RemoteRadio    string `json:"remoteRadio,omitempty"` // FlexRadio model when the far end is a radio
 
 	DownMbps      float64 `json:"downMbps"`
 	UpMbps        float64 `json:"upMbps"`
@@ -97,6 +98,7 @@ type Result struct {
 	UpLoadedRTT   float64 `json:"upLoadedRtt"`
 	LatencyMethod string  `json:"latencyMethod"`
 	Practice      bool    `json:"practice"`
+	RateCapMbps   float64 `json:"rateCapMbps,omitempty"` // far end limited test traffic to this
 
 	UDPRateMbps float64    `json:"udpRateMbps"`
 	UDPDown     *UDPStats  `json:"udpDown,omitempty"`
@@ -236,9 +238,18 @@ func (r *Result) Grade(profile string) {
 		bf, bp = bloatFairLAN, 1e9
 	}
 	bloatGrade := grade3(bloat, bf, bp, false)
+	thrGrade := func(v float64) string {
+		if r.RateCapMbps > 0 && v >= r.RateCapMbps*0.8 {
+			return "info" // as fast as the radio allowed: says nothing about the network
+		}
+		return grade3(v, p.ThrGood, p.ThrFair, true)
+	}
+	if r.RateCapMbps > 0 {
+		thrExpect = "limited to " + mbps(r.RateCapMbps) + " by the radio"
+	}
 	r.Metrics = []Metric{
-		{Key: "down", Label: "Speed  " + r.RemoteHost + " → " + r.LocalHost, Value: r.DownMbps, Unit: "Mb/s", Grade: grade3(r.DownMbps, p.ThrGood, p.ThrFair, true), Expect: thrExpect},
-		{Key: "up", Label: "Speed  " + r.LocalHost + " → " + r.RemoteHost, Value: r.UpMbps, Unit: "Mb/s", Grade: grade3(r.UpMbps, p.ThrGood, p.ThrFair, true), Expect: thrExpect},
+		{Key: "down", Label: "Speed  " + r.RemoteHost + " → " + r.LocalHost, Value: r.DownMbps, Unit: "Mb/s", Grade: thrGrade(r.DownMbps), Expect: thrExpect},
+		{Key: "up", Label: "Speed  " + r.LocalHost + " → " + r.RemoteHost, Value: r.UpMbps, Unit: "Mb/s", Grade: thrGrade(r.UpMbps), Expect: thrExpect},
 		{Key: "rtt", Label: "Delay (round trip)", Value: r.IdleRTT, Unit: "ms", Grade: grade3(r.IdleRTT, rttFair, rttPoor, false), Expect: "felt above " + itoa(rttFair) + " ms"},
 		{Key: "jitter", Label: "Jitter", Value: r.JitterMs, Unit: "ms", Grade: grade3(r.JitterMs, jitFair, jitPoor, false), Expect: "heard above " + itoa(jitFair) + " ms"},
 		{Key: "bloat", Label: "Extra delay when busy", Value: bloat, Unit: "ms", Grade: bloatGrade, Expect: "felt above " + itoa(int(bf)) + " ms"},
@@ -399,6 +410,9 @@ func (r *Result) Grade(profile string) {
 	}
 	if r.Route == "routed" && lan && !r.ProfileAuto && r.IdleRTT > 3 {
 		add("info", fmt.Sprintf("The other computer is on a different network (%s) with %s delay. If this goes through a VPN or the internet, choose \"VPN / remote site / Internet\" for a fair comparison.", r.RemoteIP, ms(r.IdleRTT)))
+	}
+	if r.RateCapMbps > 0 {
+		add("info", fmt.Sprintf("%s limits test traffic to %s so a test cannot disturb live operation. Speed here shows only whether the link can carry that much.", r.RemoteHost, mbps(r.RateCapMbps)))
 	}
 	if p.Key == "vpn" {
 		add("info", "This test went through a VPN or the internet, so speed depends on both internet connections. What matters most here is delay, jitter and loss.")
