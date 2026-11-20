@@ -63,7 +63,9 @@ canvas{width:100%;height:170px;display:block;margin-top:10px}
 .verdict.practice{background:var(--card);border:1px dashed var(--accent)} .verdict.practice h3{color:var(--accent)}
 .ctype{margin-top:14px} .ctype select{margin-top:6px}
 .practiceBox{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
-.verdict ul{margin:10px 0 0;padding-left:20px} .verdict li{margin:6px 0}
+.verdict ul{margin:6px 0 0;padding-left:20px} .verdict li{margin:6px 0}
+.nh{margin-top:14px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--mute)}
+.nh.poor{color:var(--poor)} .nh.fair{color:var(--fair)}
 .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
 .m{border:1px solid var(--line);border-radius:10px;padding:12px 14px;border-left:5px solid var(--line)}
 .m.good{border-left-color:var(--good)} .m.fair{border-left-color:var(--fair)} .m.poor{border-left-color:var(--poor)}
@@ -162,19 +164,20 @@ details summary{cursor:pointer;font-weight:600}
 
   <section class="card">
     <details id="refBox">
-      <summary>What should a healthy network look like?</summary>
-      <p class="hint">A wired link never shows its full label speed, because about 6% goes to Ethernet, IP and TCP headers. These are the numbers a healthy, idle network gives:</p>
+      <summary>What does a healthy network look like, and when would I notice?</summary>
+      <p class="hint">NetProof only calls something out when you would actually hear or feel it. The first columns are what a healthy network measures; the last ones are where people start to notice. A wired link never shows its full label speed: about 6% goes to Ethernet, IP and TCP headers.</p>
       <table>
-        <thead><tr><th></th><th>100 Mb/s LAN</th><th>1 Gb/s LAN</th><th>Wi-Fi (good)</th><th>VPN / Tailscale</th></tr></thead>
+        <thead><tr><th></th><th>Healthy 100 Mb/s LAN</th><th>Healthy 1 Gb/s LAN</th><th>Healthy VPN / Tailscale</th><th>You may notice</th><th>You will notice</th></tr></thead>
         <tbody>
-          <tr><td>Speed, each direction</td><td class="num">90 to 95 Mb/s</td><td class="num">900 to 945 Mb/s</td><td class="num">300+ Mb/s</td><td>depends on both internet links</td></tr>
-          <tr><td>Problem if below</td><td class="num">85 Mb/s</td><td class="num">850 Mb/s</td><td class="num">100 Mb/s</td><td>n/a</td></tr>
-          <tr><td>Delay (round trip)</td><td class="num">under 1 ms</td><td class="num">under 1 ms</td><td class="num">under 4 ms</td><td class="num">under 30 ms</td></tr>
-          <tr><td>Jitter</td><td class="num">under 0.5 ms</td><td class="num">under 0.5 ms</td><td class="num">under 2 ms</td><td class="num">under 3 ms</td></tr>
-          <tr><td>Packet loss</td><td class="num">0 %</td><td class="num">0 %</td><td class="num">under 0.1 %</td><td class="num">under 0.1 %</td></tr>
-          <tr><td>Extra delay when busy</td><td class="num">under 20 ms</td><td class="num">under 10 ms</td><td class="num">under 30 ms</td><td class="num">under 30 ms</td></tr>
+          <tr><td>Speed, each direction</td><td class="num">90 to 95 Mb/s</td><td class="num">900 to 945 Mb/s</td><td>depends on both internet links</td><td class="num">below 80 / 700 / 10 Mb/s</td><td class="num">below 40 / 300 / 3 Mb/s</td></tr>
+          <tr><td>Delay (round trip)</td><td class="num">under 1 ms</td><td class="num">under 1 ms</td><td class="num">10 to 40 ms</td><td class="num">above 50 ms</td><td class="num">above 150 ms</td></tr>
+          <tr><td>Jitter</td><td class="num">under 1 ms</td><td class="num">under 1 ms</td><td class="num">under 3 ms</td><td class="num">above 5 ms</td><td class="num">above 15 ms</td></tr>
+          <tr><td>Stream loss</td><td class="num">0 %</td><td class="num">0 %</td><td class="num">0 %</td><td class="num">above 0.05 %</td><td class="num">above 0.5 %</td></tr>
+          <tr><td>Extra delay when busy</td><td class="num">under 20 ms</td><td class="num">under 10 ms</td><td class="num">under 30 ms</td><td class="num">above 50 ms</td><td class="num">above 150 ms</td></tr>
+          <tr><td>Largest packet (MTU)</td><td class="num">1500</td><td class="num">1500</td><td class="num">1280 to 1420</td><td class="num">below 1280</td><td></td></tr>
         </tbody>
       </table>
+      <p class="hint">What you notice: speed shows up in file copies; delay makes remote control feel laggy and upsets CW and push-to-talk timing; jitter and loss are heard as clicks, stutter and dropouts in live audio; busy delay makes everything lag while something big is transferring.</p>
       <p class="hint"><b>Common culprits:</b> a cable that only connects at 100 Mb/s (damaged, or only 4 of 8 wires), a cheap or overheating switch, Wi-Fi in the path when you thought it was wired, a busy network during the test, or a VPN relaying traffic through a far away server.</p>
     </details>
   </section>
@@ -193,7 +196,7 @@ async function api(path, body){
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmtMbps = v => v >= 100 ? Math.round(v) : v.toFixed(1);
 const fmtVal = m => m.unit === "bytes" ? Math.round(m.value) : m.unit === "Mb/s" ? fmtMbps(m.value) : (m.unit === "%" ? m.value.toFixed(2) : (m.value < 10 ? m.value.toFixed(2) : m.value.toFixed(1)));
-const gradeWord = {good:"Good", fair:"Fair", poor:"Bad", info:"Info"};
+const gradeWord = {good:"OK", fair:"Noticeable", poor:"Bad", info:"Info"};
 
 const PTYPE_LABEL = {"1g":"Same building, wired, gigabit (1 Gb/s)","100m":"Same building, wired, 100 Mb/s","wifi":"Wi-Fi","vpn":"VPN, Tailscale, remote site or internet"};
 function renderPtype(){
@@ -312,13 +315,25 @@ function renderResult(res, isIncoming){
   const v = $("verdict");
   v.className = "verdict " + res.verdict;
   const who = isIncoming ? `<p style="margin:0 0 8px">Test run by <b>${esc(res.localHost)}</b> against this computer.</p>` : "";
-  v.innerHTML = `<h3>${esc(res.headline)}</h3>${who}<ul>${res.findings.map(f => `<li>${esc(f)}</li>`).join("")}</ul>`;
+  const notes = (res.notes && res.notes.length) ? res.notes : (res.findings || []).map(t => ({level:"", text:t}));
+  const heads = {poor:"You will notice", fair:"You may notice", info:"Good to know"};
+  let html = "", lastLevel = null;
+  for (const n of notes){
+    if (n.level !== lastLevel){
+      if (lastLevel !== null) html += "</ul>";
+      html += (heads[n.level] ? `<div class="nh ${n.level}">${heads[n.level]}</div>` : "") + "<ul>";
+      lastLevel = n.level;
+    }
+    html += `<li>${esc(n.text)}</li>`;
+  }
+  if (lastLevel !== null) html += "</ul>";
+  v.innerHTML = `<h3>${esc(res.headline)}</h3>${who}${html}`;
   $("metrics").innerHTML = res.metrics.map(m => `
     <div class="m ${m.grade}">
       ${m.grade !== "info" ? `<span class="g">${gradeWord[m.grade]}</span>` : ""}
       <div class="l">${esc(m.label)}</div>
       <div class="v">${fmtVal(m)} <small>${esc(m.unit)}</small></div>
-      <div class="e">Expected: ${esc(m.expect)}</div>
+      <div class="e">${esc(m.expect)}</div>
     </div>`).join("");
   const side = (iface, kind, link) => iface ? `${esc(iface)} (${{wired:"wired",wifi:"Wi-Fi",vpn:"VPN",virtual:"virtual"}[kind]||kind}${link>0 && kind!=="vpn" ? ", link " + (link>=1000 ? link/1000 + " Gb/s" : link + " Mb/s") : ""})` : "unknown";
   $("meta").innerHTML = `${res.remoteName ? "Tested " + esc(res.remoteName) + " (" + esc(res.remoteIP) + ")<br>" : ""}${esc(res.localHost)}: ${side(res.localIface,res.localKind,res.localLinkMbps)} &nbsp;&middot;&nbsp; ${esc(res.remoteHost)}: ${side(res.remoteIface,res.remoteKind,res.remoteLinkMbps)}<br>

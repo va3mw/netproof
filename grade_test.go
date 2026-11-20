@@ -51,7 +51,7 @@ func TestUserChoiceOverridesAuto(t *testing.T) {
 
 func TestSameSubnetGigabitStaysLAN(t *testing.T) {
 	r := &Result{LocalKind: "wired", RemoteKind: "wired", LocalLinkMbps: 1000, RemoteLinkMbps: 1000,
-		RemoteIP: "192.168.1.20", Route: "local", IdleRTT: 0.3, DownMbps: 300, UpMbps: 320, LatencyMethod: "UDP", Sent: 300}
+		RemoteIP: "192.168.1.20", Route: "local", IdleRTT: 0.3, DownMbps: 150, UpMbps: 160, LatencyMethod: "UDP", Sent: 300}
 	r.Grade("auto")
 	if r.ProfileKey != "1g" || r.Verdict != "poor" {
 		t.Fatalf("slow same-subnet gigabit must be flagged against 1g, got %s/%s", r.ProfileKey, r.Verdict)
@@ -84,11 +84,14 @@ func sickLAN() *Result {
 
 func TestSickLANGetsFixes(t *testing.T) {
 	r := sickLAN()
-	r.Grade("1g")
+	r.Grade("auto") // one end gigabit: must be judged as a gigabit LAN
+	if r.ProfileKey != "1g" {
+		t.Fatalf("auto picked %s", r.ProfileKey)
+	}
 	if r.Verdict != "poor" {
 		t.Fatalf("verdict %s", r.Verdict)
 	}
-	want := []string{"connected at 1 Gb/s", "packets are being lost", "bufferbloat", "MTU 1400", "fragmented"}
+	want := []string{"connected at 1 Gb/s", "packets are being lost", "fragmented"}
 	var titles []string
 	for _, f := range r.Fixes {
 		titles = append(titles, f.Title)
@@ -99,8 +102,9 @@ func TestSickLANGetsFixes(t *testing.T) {
 			t.Errorf("missing fix %q in: %s", w, all)
 		}
 	}
-	if gradeOf(r.Metrics, "udploss") != "poor" || gradeOf(r.Metrics, "mtu") != "fair" {
-		t.Errorf("udploss=%s mtu=%s", gradeOf(r.Metrics, "udploss"), gradeOf(r.Metrics, "mtu"))
+	// 44.6 ms busy delay on a LAN and MTU 1400 are not things you notice.
+	if gradeOf(r.Metrics, "udploss") != "poor" || gradeOf(r.Metrics, "mtu") != "fair" || gradeOf(r.Metrics, "bloat") != "good" {
+		t.Errorf("udploss=%s mtu=%s bloat=%s", gradeOf(r.Metrics, "udploss"), gradeOf(r.Metrics, "mtu"), gradeOf(r.Metrics, "bloat"))
 	}
 	t.Log("\n" + r.Text())
 }
@@ -140,5 +144,33 @@ func TestUDPRateNeverOverrunsLink(t *testing.T) {
 	}
 	if r := udpRateFor("1g", 940, 935); r != 100 {
 		t.Errorf("1g -> %v", r)
+	}
+}
+
+// The user's real LAN result that started the "only flag what you notice"
+// rework: 0.89 ms idle, 50.9 ms while saturated, 1.03 ms jitter. Nobody hears
+// that, so it must not be called a problem.
+func TestUnnoticeableLANIsGood(t *testing.T) {
+	r := &Result{LocalHost: "A", RemoteHost: "B", LocalKind: "wired", RemoteKind: "wired", LocalLinkMbps: 1000, RemoteLinkMbps: 1000,
+		RemoteIP: "192.168.1.20", Route: "local", DownMbps: 930, UpMbps: 925, IdleRTT: 0.89, JitterMs: 1.03,
+		DownLoadedRTT: 50.9, UpLoadedRTT: 30, LatencyMethod: "UDP", Sent: 300, UDPRateMbps: 100,
+		UDPDown: &UDPStats{Sent: 83333, Received: 83333, JitterMs: 0.3},
+		UDPUp:   &UDPStats{Sent: 83333, Received: 83333, JitterMs: 0.4},
+		MTU:     &MTUResult{PathMTU: 1500, DFSupported: true, FragTested: true, FragmentsOK: true}}
+	r.Grade("auto")
+	if r.Verdict != "good" || len(r.Fixes) != 0 {
+		t.Fatalf("verdict %s fixes %d\n%s", r.Verdict, len(r.Fixes), r.Text())
+	}
+	t.Log("\n" + r.Text())
+}
+
+// Loss you would hear in radio audio must be called out loudly.
+func TestAudibleLossIsPoor(t *testing.T) {
+	r := &Result{LocalKind: "wired", RemoteKind: "wired", RemoteIP: "100.92.218.56", IdleRTT: 30, JitterMs: 2,
+		DownMbps: 40, UpMbps: 20, LatencyMethod: "UDP", Sent: 300, UDPRateMbps: 10,
+		UDPDown: &UDPStats{Sent: 8333, Received: 8250, LossPct: 1.0, JitterMs: 3}}
+	r.Grade("auto")
+	if r.Verdict != "poor" || r.Notes[0].Level != "poor" || !strings.Contains(r.Notes[0].Text, "You will hear it") {
+		t.Fatalf("%s\n%s", r.Verdict, r.Text())
 	}
 }

@@ -65,26 +65,26 @@ bufferbloat (SQM / cake / fq_codel), jitter, VPN path (relays, Tailscale DERP), 
 fragmentation (MSS clamping, tunnel MTU), and UDP blocked by firewalls. The checklists are also
 in the saved and copied text report.
 
-## Reference values (healthy network)
+## How results are judged
 
-| | 100 Mb/s LAN | 1 Gb/s LAN | Wi-Fi | VPN / Tailscale |
-|---|---|---|---|---|
-| Speed each way | 90 to 95 Mb/s | 900 to 945 Mb/s | 300+ Mb/s | no fixed target |
-| Problem below | 85 | 850 | 100 | |
-| Delay | < 1 ms | < 1 ms | < 4 ms | < 30 ms |
-| Jitter | < 0.5 ms | < 0.5 ms | < 2 ms | < 3 ms |
-| Loss | 0 % | 0 % | < 0.1 % | < 0.1 % |
-| Extra delay when busy | < 20 ms | < 10 ms | < 30 ms | < 30 ms |
+NetProof only calls something out when a person would actually hear or feel it. Findings are
+grouped as **You will notice** (the only thing that makes the verdict "problems"), **You may
+notice**, and **Good to know**, and each one says what you will experience first (clicks and
+dropouts, laggy remote control, slow file copies) and the numbers second.
 
-Before testing, users can say what kind of connection it is ("What kind of connection is
-this?": gigabit LAN, 100 Mb LAN, Wi-Fi, or VPN / remote site / internet), or leave it on
-Automatic. Automatic treats the link as a VPN or remote site when the other computer is on a
-different subnet and delay is above 3 ms (site-to-site VPNs look like plain Ethernet otherwise),
-or when delay is above 5 ms on any wired link, and shows the reason with the results.
+| | Healthy 100 Mb/s LAN | Healthy 1 Gb/s LAN | Healthy VPN | You may notice | You will notice |
+|---|---|---|---|---|---|
+| Speed each way | 90 to 95 Mb/s | 900 to 945 Mb/s | depends on both internet links | below 80 / 700 / 10 Mb/s | below 40 / 300 / 3 Mb/s |
+| Delay (round trip) | < 1 ms | < 1 ms | 10 to 40 ms | > 50 ms | > 150 ms |
+| Jitter | < 1 ms | < 1 ms | < 3 ms | > 5 ms | > 15 ms |
+| Stream loss | 0 % | 0 % | 0 % | > 0.05 % | > 0.5 % |
+| Extra delay when busy | < 20 ms | < 10 ms | < 30 ms | > 50 ms (LAN: > 100 ms) | > 150 ms (never on a LAN) |
+| Largest packet (MTU) | 1500 | 1500 | 1280 to 1420 | < 1280 | |
 
-The expected profile is picked automatically from the adapters' link speed and type (wired,
-Wi-Fi, VPN, Tailscale 100.x addresses) and can be changed on the results screen. It also flags
-adapters stuck at 100 Mb/s or 10 Mb/s, half duplex, and lopsided up/down speeds.
+Only speed depends on the kind of link. Delay, jitter, loss and busy delay use the same
+"would you notice" limits everywhere: audio stutters the same whether jitter came from Wi-Fi or
+a VPN. If one computer is gigabit and the other is stuck at 100 Mb/s, Automatic judges the link
+as gigabit and points at the slow end.
 
 ## Tested before
 

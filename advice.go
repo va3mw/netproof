@@ -21,15 +21,19 @@ func buildFixes(r *Result, p Profile) []Fix {
 
 	// --- physical layer first: nothing else matters until this is right
 	slowSide := ""
+	fastest := r.LocalLinkMbps
+	if r.RemoteLinkMbps > fastest {
+		fastest = r.RemoteLinkMbps
+	}
 	for _, s := range []struct {
 		host, kind string
 		link       int
 	}{{r.LocalHost, r.LocalKind, r.LocalLinkMbps}, {r.RemoteHost, r.RemoteKind, r.RemoteLinkMbps}} {
-		if s.kind == "wired" && s.link > 0 && s.link < 1000 {
+		if s.kind == "wired" && s.link > 0 && (s.link <= 10 || (s.link == 100 && (fastest >= 1000 || p.Key == "1g"))) {
 			slowSide = s.host
 		}
 	}
-	if slowSide != "" && p.Key != "100m" {
+	if slowSide != "" {
 		add(Fix{"Get " + slowSide + " connected at 1 Gb/s", []string{
 			"Swap the network cable for a known good one, Cat5e or Cat6. A cable with a damaged wire still works, but only at 100 Mb/s.",
 			"Look at the lights on the switch port: on most switches a different colour (often amber instead of green) means 100 Mb/s.",
@@ -83,11 +87,17 @@ func buildFixes(r *Result, p Profile) []Fix {
 	}
 
 	// --- jitter and bufferbloat
-	if bad("bloat") {
-		add(Fix{"Stop the network getting laggy when it is busy (bufferbloat)", []string{
+	if bad("bloat") && lan {
+		add(Fix{"Stop the LAN getting laggy during big copies", []string{
+			"This only happens while the network is completely full, for example during a large file copy or backup between computers. Schedule those for when you are not operating.",
+			"In the network adapter's advanced settings on both computers, try turning \"Interrupt Moderation\" off and \"Flow Control\" on, then test again.",
+			"Cheap unmanaged switches queue a lot of traffic. A better switch, or a managed switch with QoS giving your radio traffic priority, keeps it responsive.",
+		}})
+	} else if bad("bloat") {
+		add(Fix{"Stop the connection getting laggy when it is busy (bufferbloat)", []string{
 			"In the router, turn on SQM / Smart Queue Management, \"cake\" or \"fq_codel\" (OpenWrt, pfSense, OPNsense, Ubiquiti and many others have it), and set it to about 90% of your real line speed.",
 			"If the router has no such setting, QoS that limits big downloads and uploads helps; turning it off on a router whose QoS is badly done can also help.",
-			"Schedule backups and large cloud sync for the night.",
+			"Schedule backups and large cloud sync for when you are not operating.",
 		}})
 	}
 	if bad("jitter") || bad("udpjitter") {
@@ -117,8 +127,7 @@ func buildFixes(r *Result, p Profile) []Fix {
 
 	// --- MTU and fragmentation
 	if m := r.MTU; m != nil && m.PathMTU > 0 {
-		low := (lan && m.PathMTU < 1500) || m.PathMTU < 1280
-		if low {
+		if m.PathMTU < 1280 {
 			add(Fix{fmt.Sprintf("Fix the packet size limit (MTU %d)", m.PathMTU), []string{
 				"Find the device that lowers the MTU: a VPN or tunnel, a PPPoE internet connection (1492), or a switch/router with a wrong MTU setting.",
 				"On a plain LAN every device should be at 1500. Check router and switch interface settings for a lower value.",

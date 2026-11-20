@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -23,18 +24,34 @@ type Profile struct {
 	BloatFair  float64 `json:"bloatFair"`
 }
 
-// A healthy wired gigabit link moves about 940 Mb/s of real TCP data (the
-// rest is Ethernet, IP and TCP overhead). Fast Ethernet: about 94 Mb/s.
+// Speed is the one thing whose "normal" depends on the kind of link. A
+// healthy wired gigabit link moves about 940 Mb/s of real TCP data (the rest
+// is Ethernet, IP and TCP overhead); Fast Ethernet about 94 Mb/s.
+//
+// ThrGood / ThrFair are deliberately practical: below ThrGood people notice
+// slow file copies, below ThrFair the link is clearly broken.
 var profiles = map[string]Profile{
-	"1g": {Key: "1g", Name: "1 Gb/s wired LAN", ExpectMbps: 940, ThrGood: 850, ThrFair: 600,
-		RTTGood: 1, RTTFair: 3, JitGood: 0.5, JitFair: 2, LossGood: 0.01, LossFair: 0.5, BloatGood: 10, BloatFair: 40},
-	"100m": {Key: "100m", Name: "100 Mb/s wired LAN", ExpectMbps: 94, ThrGood: 85, ThrFair: 60,
-		RTTGood: 1, RTTFair: 3, JitGood: 0.5, JitFair: 2, LossGood: 0.01, LossFair: 0.5, BloatGood: 20, BloatFair: 60},
-	"wifi": {Key: "wifi", Name: "Wi-Fi", ExpectMbps: 0, ThrGood: 300, ThrFair: 100,
-		RTTGood: 4, RTTFair: 15, JitGood: 2, JitFair: 6, LossGood: 0.1, LossFair: 1, BloatGood: 30, BloatFair: 100},
-	"vpn": {Key: "vpn", Name: "VPN / remote site / Internet", ExpectMbps: 0, ThrGood: 0, ThrFair: 0,
-		RTTGood: 30, RTTFair: 80, JitGood: 3, JitFair: 10, LossGood: 0.1, LossFair: 1, BloatGood: 30, BloatFair: 100},
+	"1g":   {Key: "1g", Name: "1 Gb/s wired LAN", ExpectMbps: 940, ThrGood: 700, ThrFair: 300},
+	"100m": {Key: "100m", Name: "100 Mb/s wired LAN", ExpectMbps: 94, ThrGood: 80, ThrFair: 40},
+	"wifi": {Key: "wifi", Name: "Wi-Fi", ExpectMbps: 0, ThrGood: 100, ThrFair: 25},
+	"vpn":  {Key: "vpn", Name: "VPN / remote site / Internet", ExpectMbps: 0, ThrGood: 10, ThrFair: 3},
 }
+
+// What people actually hear and feel. These are the same for every kind of
+// link: a radio operator does not care whether 20 ms of jitter came from
+// Wi-Fi or a VPN, only that the audio stutters.
+const (
+	rttFair   = 50   // ms round trip: remote control starts to feel laggy
+	rttPoor   = 150  // ms: CW / PTT timing and conversation are clearly affected
+	jitFair   = 5    // ms: audio apps need a bigger buffer, occasional stutter
+	jitPoor   = 15   // ms: stutter and dropouts with normal buffers
+	lossFair  = 0.05 // % of a real-time stream: occasional clicks or gaps
+	lossPoor  = 0.5  // %: frequent dropouts
+	bloatFair = 50   // ms extra delay while the link is busy: lag you notice
+	bloatPoor = 150  // ms: remote operation is hard while anything big transfers
+
+	bloatFairLAN = 100 // on a LAN, only during big copies
+)
 
 var profileOrder = []string{"1g", "100m", "wifi", "vpn"}
 
@@ -88,15 +105,23 @@ type Result struct {
 	MTU         *MTUResult `json:"mtu,omitempty"`
 	Fixes       []Fix      `json:"fixes"`
 
-	ProfileKey  string   `json:"profileKey"`
-	ProfileName string   `json:"profileName"`
-	ProfileAuto bool     `json:"profileAuto"`
-	AutoReason  string   `json:"autoReason"`
-	Route       string   `json:"route"` // "local": same subnet, "routed": through a router/VPN
-	Metrics     []Metric `json:"metrics"`
-	Verdict     string   `json:"verdict"`
-	Headline    string   `json:"headline"`
-	Findings    []string `json:"findings"`
+	ProfileKey  string    `json:"profileKey"`
+	ProfileName string    `json:"profileName"`
+	ProfileAuto bool      `json:"profileAuto"`
+	AutoReason  string    `json:"autoReason"`
+	Route       string    `json:"route"` // "local": same subnet, "routed": through a router/VPN
+	Metrics     []Metric  `json:"metrics"`
+	Verdict     string    `json:"verdict"`
+	Headline    string    `json:"headline"`
+	Findings    []string  `json:"findings"` // flat list, read by older versions
+	Notes       []Finding `json:"notes"`    // grouped by how much you will notice
+}
+
+// Finding: Level is "poor" (you will notice), "fair" (you may notice),
+// "info" (good to know) or "good".
+type Finding struct {
+	Level string `json:"level"`
+	Text  string `json:"text"`
 }
 
 // autoProfile guesses what the connection is supposed to be, and why.
@@ -117,8 +142,16 @@ func (r *Result) autoProfile() (string, string) {
 		return "wifi", "one of the computers is on Wi-Fi"
 	}
 	link := minNonZero(r.LocalLinkMbps, r.RemoteLinkMbps)
+	fast := r.LocalLinkMbps
+	if r.RemoteLinkMbps > fast {
+		fast = r.RemoteLinkMbps
+	}
+	if link > 0 && link < 1000 && fast >= 1000 {
+		// One end is gigabit, so the network is meant to be: the slow end is the fault.
+		return "1g", "one computer is connected at " + fmtLink(fast) + ", so this network should be gigabit, but the other end is only at " + fmtLink(link)
+	}
 	if link > 0 && link < 1000 {
-		return "100m", "an adapter is connected at " + fmtLink(link)
+		return "100m", "both computers are connected at " + fmtLink(link)
 	}
 	if link >= 1000 {
 		return "1g", "both computers are on the same network, wired at " + fmtLink(link) + " or faster"
@@ -174,8 +207,8 @@ func mbps(v float64) string {
 	return f1(v) + " Mb/s"
 }
 
-// Grade scores the result against a profile ("auto" picks one) and writes the
-// plain English verdict.
+// Grade scores the result and writes the plain English verdict. Only things a
+// person would actually hear or feel can make the verdict worse.
 func (r *Result) Grade(profile string) {
 	r.ProfileAuto = profile == "" || profile == "auto"
 	r.AutoReason = ""
@@ -184,209 +217,224 @@ func (r *Result) Grade(profile string) {
 	}
 	p := profiles[profile]
 	r.ProfileKey, r.ProfileName = p.Key, p.Name
-	r.Metrics, r.Findings = nil, nil
+	r.Metrics, r.Findings, r.Notes = nil, nil, nil
 	if r.Practice {
 		r.gradePractice()
 		return
 	}
+	lan := p.Key == "1g" || p.Key == "100m"
 
-	down := r.RemoteHost + " → " + r.LocalHost
-	up := r.LocalHost + " → " + r.RemoteHost
-	thrExpect := "no fixed target"
-	if p.ExpectMbps > 0 {
-		thrExpect = "about " + mbps(p.ExpectMbps) + " (at least " + mbps(p.ThrGood) + ")"
-	} else if p.ThrGood > 0 {
-		thrExpect = "good Wi-Fi: " + mbps(p.ThrGood) + " or more"
+	thrExpect := "about " + mbps(p.ExpectMbps) + " on a healthy link"
+	if p.ExpectMbps == 0 {
+		thrExpect = "noticeably slow below " + mbps(p.ThrGood)
 	}
-	thrGrade := func(v float64) string {
-		if p.ThrGood == 0 {
-			return "info"
-		}
-		return grade3(v, p.ThrGood, p.ThrFair, true)
+	bloat := maxf(0, maxf(r.DownLoadedRTT, r.UpLoadedRTT)-r.IdleRTT)
+	bf, bp := float64(bloatFair), float64(bloatPoor)
+	if lan {
+		// A LAN is only this full during a flat-out file copy, so a queue
+		// there matters less: flag it later and never as the main problem.
+		bf, bp = bloatFairLAN, 1e9
 	}
-	bloat := maxf(r.DownLoadedRTT, r.UpLoadedRTT) - r.IdleRTT
-	if bloat < 0 {
-		bloat = 0
-	}
-
+	bloatGrade := grade3(bloat, bf, bp, false)
 	r.Metrics = []Metric{
-		{Key: "down", Label: "Download  " + down, Value: r.DownMbps, Unit: "Mb/s", Grade: thrGrade(r.DownMbps), Expect: thrExpect},
-		{Key: "up", Label: "Upload  " + up, Value: r.UpMbps, Unit: "Mb/s", Grade: thrGrade(r.UpMbps), Expect: thrExpect},
-		{Key: "rtt", Label: "Delay (round trip)", Value: r.IdleRTT, Unit: "ms", Grade: grade3(r.IdleRTT, p.RTTGood, p.RTTFair, false), Expect: "under " + ms(p.RTTGood)},
-		{Key: "jitter", Label: "Jitter", Value: r.JitterMs, Unit: "ms", Grade: grade3(r.JitterMs, p.JitGood, p.JitFair, false), Expect: "under " + ms(p.JitGood)},
-	}
-	if r.LatencyMethod == "UDP" {
-		r.Metrics = append(r.Metrics, Metric{Key: "loss", Label: "Packet loss", Value: r.LossPct, Unit: "%", Grade: grade3(r.LossPct, p.LossGood, p.LossFair, false), Expect: "0 %"})
-	} else {
-		r.Metrics = append(r.Metrics, Metric{Key: "loss", Label: "Packet loss", Value: 0, Unit: "%", Grade: "info", Expect: "not measured (UDP blocked)"})
-	}
-	r.Metrics = append(r.Metrics, Metric{Key: "bloat", Label: "Extra delay when busy", Value: bloat, Unit: "ms", Grade: grade3(bloat, p.BloatGood, p.BloatFair, false), Expect: "under " + ms(p.BloatGood)})
-	if m := r.MTU; m != nil && m.DFSupported && m.PathMTU > 0 {
-		g, exp := "good", "1500 on a LAN"
-		switch {
-		case m.PathMTU < 1280:
-			g = "poor"
-		case m.PathMTU < 1500 && (p.Key == "1g" || p.Key == "100m" || p.Key == "wifi"):
-			g = "fair"
-		}
-		if p.Key == "vpn" {
-			exp = "1280 or more over a VPN"
-		}
-		if m.FragTested && !m.FragmentsOK && g == "good" {
-			g = "fair"
-		}
-		r.Metrics = append(r.Metrics, Metric{Key: "mtu", Label: "Largest packet (MTU)", Value: float64(m.PathMTU), Unit: "bytes", Grade: g, Expect: exp})
+		{Key: "down", Label: "Speed  " + r.RemoteHost + " → " + r.LocalHost, Value: r.DownMbps, Unit: "Mb/s", Grade: grade3(r.DownMbps, p.ThrGood, p.ThrFair, true), Expect: thrExpect},
+		{Key: "up", Label: "Speed  " + r.LocalHost + " → " + r.RemoteHost, Value: r.UpMbps, Unit: "Mb/s", Grade: grade3(r.UpMbps, p.ThrGood, p.ThrFair, true), Expect: thrExpect},
+		{Key: "rtt", Label: "Delay (round trip)", Value: r.IdleRTT, Unit: "ms", Grade: grade3(r.IdleRTT, rttFair, rttPoor, false), Expect: "felt above " + itoa(rttFair) + " ms"},
+		{Key: "jitter", Label: "Jitter", Value: r.JitterMs, Unit: "ms", Grade: grade3(r.JitterMs, jitFair, jitPoor, false), Expect: "heard above " + itoa(jitFair) + " ms"},
+		{Key: "bloat", Label: "Extra delay when busy", Value: bloat, Unit: "ms", Grade: bloatGrade, Expect: "felt above " + itoa(int(bf)) + " ms"},
 	}
 	if loss, jit, ok := r.udpWorst(); ok {
 		r.Metrics = append(r.Metrics,
-			Metric{Key: "udploss", Label: "UDP stream loss (" + f1(r.UDPRateMbps) + " Mb/s)", Value: loss, Unit: "%", Grade: grade3(loss, p.LossGood, p.LossFair, false), Expect: "0 %"},
-			Metric{Key: "udpjitter", Label: "UDP stream jitter", Value: jit, Unit: "ms", Grade: grade3(jit, p.JitGood, p.JitFair, false), Expect: "under " + ms(p.JitGood)})
-	}
-
-	worst := "good"
-	rank := map[string]int{"info": 0, "good": 0, "fair": 1, "poor": 2}
-	for _, m := range r.Metrics {
-		if rank[m.Grade] > rank[worst] {
-			worst = m.Grade
+			Metric{Key: "udploss", Label: "Stream loss (" + f1(r.UDPRateMbps) + " Mb/s UDP)", Value: loss, Unit: "%", Grade: grade3(loss, lossFair, lossPoor, false), Expect: "heard above " + f2(lossFair) + " %"},
+			Metric{Key: "udpjitter", Label: "Stream jitter", Value: jit, Unit: "ms", Grade: grade3(jit, jitFair, jitPoor, false), Expect: "heard above " + itoa(jitFair) + " ms"})
+	} else if r.LatencyMethod == "UDP" {
+		// Only the 300 probes: too few to grade small loss, so count packets.
+		g := "good"
+		switch {
+		case r.Lost >= 6:
+			g = "poor"
+		case r.Lost >= 2:
+			g = "fair"
 		}
+		r.Metrics = append(r.Metrics, Metric{Key: "loss", Label: "Packet loss", Value: r.LossPct, Unit: "%", Grade: g, Expect: "0 %"})
 	}
-
-	// ---- plain English findings, worst first
-	var poor, fair, notes []string
-	add := func(g, s string) {
-		switch g {
-		case "poor":
-			poor = append(poor, s)
-		case "fair":
-			fair = append(fair, s)
-		default:
-			notes = append(notes, s)
+	if m := r.MTU; m != nil && m.DFSupported && m.PathMTU > 0 {
+		g := "good"
+		if m.PathMTU < 1280 || (m.FragTested && !m.FragmentsOK) {
+			g = "fair"
 		}
+		r.Metrics = append(r.Metrics, Metric{Key: "mtu", Label: "Largest packet (MTU)", Value: float64(m.PathMTU), Unit: "bytes", Grade: g, Expect: "1500 normal, 1280+ fine"})
 	}
 
-	for _, side := range []struct {
+	// ---- findings, in the words of what you will experience
+	add := func(level, text string) { r.Notes = append(r.Notes, Finding{level, text}) }
+	sides := []struct {
 		host, iface, kind, duplex string
 		link                      int
 	}{
 		{r.LocalHost, r.LocalIface, r.LocalKind, r.LocalDuplex, r.LocalLinkMbps},
 		{r.RemoteHost, r.RemoteIface, r.RemoteKind, r.RemoteDuplex, r.RemoteLinkMbps},
-	} {
-		if side.kind == "wired" && side.link > 0 && side.link <= 10 {
-			add("poor", fmt.Sprintf("%s's network adapter (%s) is connected at only %d Mb/s. That is ancient and almost always means a broken cable or a damaged port.", side.host, side.iface, side.link))
-			worst = "poor"
-		} else if side.kind == "wired" && side.link == 100 && p.Key != "vpn" {
-			add("poor", fmt.Sprintf("%s's network adapter (%s) is connected at only 100 Mb/s instead of 1 Gb/s. If this network is meant to be gigabit, the usual causes are a bad or cheap cable (gigabit needs all 8 wires, Cat5e or better), a bad wall jack, an old switch, or an adapter setting.", side.host, side.iface))
-			if p.Key == "1g" {
-				worst = "poor"
+	}
+	fastest := maxf(float64(r.LocalLinkMbps), float64(r.RemoteLinkMbps))
+	// When one end is stuck at 100 Mb/s, a speed of ~80-95 Mb/s is simply that
+	// limit: report it once, as the adapter problem, at the speed's level.
+	linkCapped := false
+	capLevel := "fair"
+	for _, sd := range sides {
+		if sd.kind == "wired" && sd.link == 100 && (fastest >= 1000 || p.Key == "1g") {
+			linkCapped = true
+		}
+	}
+	if linkCapped {
+		for _, m := range r.Metrics[:2] {
+			if m.Value >= 75 && m.Value <= 100 && m.Grade == "poor" {
+				capLevel = "poor"
 			}
 		}
-		if side.duplex == "half" && side.kind == "wired" {
-			add("poor", fmt.Sprintf("%s's network adapter is running in half duplex. That causes collisions and terrible speeds. Set the adapter and the switch port to Auto.", side.host))
-			worst = "poor"
+	}
+	for _, sd := range sides {
+		switch {
+		case sd.kind == "wired" && sd.link > 0 && sd.link <= 10:
+			add("poor", fmt.Sprintf("Everything to and from %s will feel slow: its network adapter (%s) is connected at only %d Mb/s. That almost always means a broken cable or a damaged port.", sd.host, sd.iface, sd.link))
+		case sd.kind == "wired" && sd.link == 100 && (fastest >= 1000 || p.Key == "1g"):
+			add(capLevel, fmt.Sprintf("Large file copies to and from %s will be about 10 times slower than they should: its network adapter (%s) is connected at 100 Mb/s instead of 1 Gb/s. Radio audio and remote control are not affected. Usually a bad or cheap cable, a wall jack, or an old switch.", sd.host, sd.iface))
+		case sd.kind == "wired" && sd.link == 100:
+			add("info", fmt.Sprintf("%s is connected at 100 Mb/s. Plenty for radio and remote control; large file copies are limited to about 11 MB per second.", sd.host))
+		}
+		if sd.duplex == "half" && sd.kind == "wired" {
+			add("poor", fmt.Sprintf("Expect slow, unreliable transfers to and from %s: its adapter runs in half duplex, which causes collisions and lost packets. Set the adapter and the switch port to Auto.", sd.host))
 		}
 	}
 
 	for _, m := range r.Metrics[:2] {
-		if m.Grade == "poor" || m.Grade == "fair" {
-			dir := "from " + r.RemoteHost + " to " + r.LocalHost
-			if m.Key == "up" {
-				dir = "from " + r.LocalHost + " to " + r.RemoteHost
-			}
-			s := fmt.Sprintf("Speed %s was %s.", dir, mbps(m.Value))
-			if p.ExpectMbps > 0 {
-				s += fmt.Sprintf(" A healthy %s should move about %s (%d%% of that is what you got).", p.Name, mbps(p.ExpectMbps), int(m.Value*100/p.ExpectMbps+0.5))
-			} else {
-				s += fmt.Sprintf(" Good %s usually does %s or more.", p.Name, mbps(p.ThrGood))
-			}
-			add(m.Grade, s)
+		if m.Grade != "fair" && m.Grade != "poor" {
+			continue
 		}
-	}
-	if r.LocalKind == "wired" && r.RemoteKind == "wired" && r.DownMbps > 0 && r.UpMbps > 0 {
-		lo, hi := minf(r.DownMbps, r.UpMbps), maxf(r.DownMbps, r.UpMbps)
-		if lo < hi*0.6 && p.ThrGood > 0 {
-			add("fair", fmt.Sprintf("Speed is lopsided: %s one way and %s the other. On a wired network both directions should be about the same. Suspect a cable, a switch port, a duplex mismatch, or a slow computer at one end.", mbps(hi), mbps(lo)))
+		if linkCapped && m.Value >= 75 && m.Value <= 100 {
+			continue // already explained by the 100 Mb/s adapter
 		}
-	}
-	if g := gradeOf(r.Metrics, "rtt"); g != "good" {
-		add(g, fmt.Sprintf("Delay is %s round trip (expected under %s for %s). Something between the two computers is slow or overloaded.", ms(r.IdleRTT), ms(p.RTTGood), p.Name))
-	}
-	if g := gradeOf(r.Metrics, "jitter"); g != "good" {
-		add(g, fmt.Sprintf("Jitter is %s (expected under %s). The delay keeps changing, which makes live audio, video calls and remote control stutter or drop out.", ms(r.JitterMs), ms(p.JitGood)))
-	}
-	if r.LatencyMethod == "UDP" && r.Lost > 0 {
-		g := gradeOf(r.Metrics, "loss")
-		s := fmt.Sprintf("%d of %d test packets were lost (%s%%).", r.Lost, r.Sent, f2(r.LossPct))
-		if p.Key == "1g" || p.Key == "100m" {
-			s += " On a wired LAN this should be zero. Lost packets point to bad cables, a failing switch or an overloaded link."
-		} else {
-			s += " Lost packets cause dropouts in live audio and video."
+		dir := r.RemoteHost + " to " + r.LocalHost
+		if m.Key == "up" {
+			dir = r.LocalHost + " to " + r.RemoteHost
 		}
-		add(g, s)
+		var s string
+		switch {
+		case p.Key == "vpn" && m.Grade == "poor":
+			s = fmt.Sprintf("Remote audio plus a panadapter or video may not fit: from %s the link only carried %s.", dir, mbps(m.Value))
+		case p.Key == "vpn":
+			s = fmt.Sprintf("Remote audio will work, but panadapter, video or file transfers may struggle: from %s the link carried %s.", dir, mbps(m.Value))
+		case p.ExpectMbps > 0:
+			s = fmt.Sprintf("Copying files from %s takes about %d times longer than it should: it moved %s, where a healthy %s does about %s.", dir, int(p.ExpectMbps/maxf(m.Value, 1)+0.5), mbps(m.Value), p.Name, mbps(p.ExpectMbps))
+		default:
+			s = fmt.Sprintf("Large transfers from %s will feel slow: %s, where good %s does %s or more.", dir, mbps(m.Value), p.Name, mbps(p.ThrGood))
+		}
+		add(m.Grade, s)
+	}
+	if g := gradeOf(r.Metrics, "rtt"); g == "fair" || g == "poor" {
+		add(g, fmt.Sprintf("Remote operation will feel laggy: every action takes %s to reach the other end and come back. Above about %d ms people notice it in remote control, and CW and push-to-talk timing suffer.", ms(r.IdleRTT), rttFair))
+	}
+	jit := r.JitterMs
+	if _, sj, ok := r.udpWorst(); ok {
+		jit = maxf(jit, sj)
+	}
+	if g := grade3(jit, jitFair, jitPoor, false); g != "good" {
+		add(g, fmt.Sprintf("Live audio may stutter: the delay keeps changing by about %s. Raising the audio or network buffer in your radio software hides this, at the cost of a little more delay.", ms(jit)))
 	}
 	for _, d := range []struct {
 		st       *UDPStats
 		from, to string
 	}{{r.UDPDown, r.RemoteHost, r.LocalHost}, {r.UDPUp, r.LocalHost, r.RemoteHost}} {
-		if d.st == nil {
+		if d.st == nil || d.st.Sent <= d.st.Received {
 			continue
 		}
+		g := grade3(d.st.LossPct, lossFair, lossPoor, false)
+		if g == "good" {
+			g = "info"
+		}
 		lost := d.st.Sent - d.st.Received
-		if lost > 0 {
-			add(grade3(d.st.LossPct, p.LossGood, p.LossFair, false), fmt.Sprintf("While streaming %s Mb/s of UDP from %s to %s, %d of %d packets were lost (%s%%). Real-time UDP apps like ham radio audio, SDR panadapter and IQ streams cannot resend lost packets, so this means audio dropouts, gaps and disconnects.",
-				f1(r.UDPRateMbps), d.from, d.to, lost, d.st.Sent, f2(d.st.LossPct)))
+		what := "You will hear it: expect clicks, dropouts and gaps in the panadapter"
+		if g == "fair" {
+			what = "You may hear it now and then as a click or a short gap in the audio"
+		} else if g == "info" {
+			what = "Too few to hear"
 		}
-		if d.st.Mbps > 0 && d.st.Mbps < r.UDPRateMbps*0.9 && d.st.LossPct > 1 {
-			add("info", fmt.Sprintf("The link from %s to %s only delivered %s of the %s Mb/s UDP stream.", d.from, d.to, mbps(d.st.Mbps), f1(r.UDPRateMbps)))
-		}
-		if d.st.Received > 0 && float64(d.st.OutOfOrder)/float64(d.st.Received) > 0.001 {
-			add("info", fmt.Sprintf("%d UDP packets from %s to %s arrived out of order. Some apps treat these as lost. Usually caused by VPNs or links that split traffic over several paths.", d.st.OutOfOrder, d.from, d.to))
-		}
+		add(g, fmt.Sprintf("%s. %d of %d packets of a steady %s Mb/s stream from %s to %s were lost (%s%%), and real-time audio and SDR data cannot be resent.", what, lost, d.st.Sent, f1(r.UDPRateMbps), d.from, d.to, f2(d.st.LossPct)))
 	}
-	if g := gradeOf(r.Metrics, "udpjitter"); g == "fair" || g == "poor" {
-		_, jit, _ := r.udpWorst()
-		add(g, fmt.Sprintf("UDP stream jitter is %s (expected under %s). Real-time audio will need a bigger buffer (more delay) to avoid dropouts.", ms(jit), ms(p.JitGood)))
+	if g := gradeOf(r.Metrics, "loss"); g == "fair" || g == "poor" {
+		add(g, fmt.Sprintf("Expect occasional dropouts: %d of %d test packets were lost.", r.Lost, r.Sent))
 	}
-	if r.UDPNote != "" {
-		add("info", r.UDPNote)
+	if g := gradeOf(r.Metrics, "bloat"); g == "fair" || g == "poor" {
+		busy := maxf(r.DownLoadedRTT, r.UpLoadedRTT)
+		where := "while someone downloads or uploads something big"
+		if lan {
+			where = "while a large file copy is running between computers"
+		}
+		add(g, fmt.Sprintf("Everything gets laggy %s: delay went from %s to %s when the link was full (\"bufferbloat\"). Remote control and audio will lag at those times.", where, ms(r.IdleRTT), ms(busy)))
+	} else if bloat > 10 {
+		add("info", fmt.Sprintf("When the link was completely full (like a big file copy), delay rose by %s. You are unlikely to notice.", ms(bloat)))
+	}
+	if r.LatencyMethod != "UDP" || r.UDPNote != "" {
+		msg := r.UDPNote
+		if msg == "" {
+			msg = "UDP packets are blocked between these computers (probably a firewall)."
+		}
+		add("poor", "Ham radio audio, SDR data and most real-time apps use UDP, and it does not get through here. "+msg)
 	}
 	if m := r.MTU; m != nil && m.PathMTU > 0 {
-		if g := gradeOf(r.Metrics, "mtu"); g == "fair" || g == "poor" {
-			if m.PathMTU < 1500 {
-				add(g, fmt.Sprintf("The largest packet that gets through in one piece is %d bytes (a normal network carries 1500). Something on the path, usually a VPN, tunnel or PPPoE line, is shrinking packets.", m.PathMTU))
-			}
+		switch {
+		case m.PathMTU < 1280:
+			add("fair", fmt.Sprintf("Some VPN and real-time apps may fail or disconnect: the largest packet that gets through is only %d bytes.", m.PathMTU))
+		case m.PathMTU < 1500:
+			add("info", fmt.Sprintf("Packets are limited to %d bytes on this path (normal is 1500). Usual on VPNs and PPPoE lines and normally unnoticeable; apps that send large UDP packets should stay below %d bytes.", m.PathMTU, m.PathMTU-28))
 		}
 		if m.FragTested && !m.FragmentsOK {
-			add("fair", "Large UDP packets that have to be split into pieces are being dropped. Apps that send big UDP packets will fail silently on this path.")
+			add("fair", "Apps that send large UDP packets will fail silently here: packets too big for the path are dropped instead of being split.")
 		}
 	}
-	if g := gradeOf(r.Metrics, "bloat"); g != "good" {
-		add(g, fmt.Sprintf("When the network was busy, delay jumped from %s to %s. This is called bufferbloat: everything gets laggy while someone is downloading or uploading.", ms(r.IdleRTT), ms(maxf(r.DownLoadedRTT, r.UpLoadedRTT))))
+	for _, d := range []*UDPStats{r.UDPDown, r.UDPUp} {
+		if d != nil && d.Received > 0 && float64(d.OutOfOrder)/float64(d.Received) > 0.001 {
+			add("info", fmt.Sprintf("%d stream packets arrived out of order. Some apps treat these as lost. Common on VPNs that use several paths.", d.OutOfOrder))
+			break
+		}
 	}
-	if r.LatencyMethod != "UDP" {
-		add("info", "UDP packets were blocked (probably by a firewall), so delay was measured over TCP and packet loss could not be measured. Allow NetProof through the firewall on both computers for a complete test.")
-	}
-	if r.Route == "routed" && (p.Key == "1g" || p.Key == "100m") && !r.ProfileAuto && r.IdleRTT > 3 {
-		add("info", fmt.Sprintf("The other computer is on a different network (%s) and delay is %s. If this connection goes through a VPN or the internet, choose \"VPN / remote site / Internet\" for a fair comparison.", r.RemoteIP, ms(r.IdleRTT)))
+	if r.Route == "routed" && lan && !r.ProfileAuto && r.IdleRTT > 3 {
+		add("info", fmt.Sprintf("The other computer is on a different network (%s) with %s delay. If this goes through a VPN or the internet, choose \"VPN / remote site / Internet\" for a fair comparison.", r.RemoteIP, ms(r.IdleRTT)))
 	}
 	if p.Key == "vpn" {
-		add("info", "This test went through a VPN, a router between sites, or the internet. Speed then depends on both internet connections and on how the VPN routes traffic, so there is no fixed speed target. Delay, jitter and loss matter most here.")
-		if r.IdleRTT > 0 && p.Key == "vpn" && isTailscaleIP(parseIP(r.RemoteIP)) && r.IdleRTT > 40 {
-			add("info", "If Tailscale is relaying this connection (\"relay\" in tailscale status), delay will be higher than a direct connection.")
+		add("info", "This test went through a VPN or the internet, so speed depends on both internet connections. What matters most here is delay, jitter and loss.")
+		if isTailscaleIP(parseIP(r.RemoteIP)) && r.IdleRTT > 40 {
+			add("info", "If Tailscale is relaying this connection (\"via DERP\" in tailscale ping), delay will be higher than a direct connection.")
 		}
 	}
 
-	r.Findings = append(append(poor, fair...), notes...)
-	r.Fixes = buildFixes(r, p)
+	// ---- verdict: only what you would notice counts
+	worst := "good"
+	for _, f := range r.Notes {
+		if f.Level == "poor" || (f.Level == "fair" && worst == "good") {
+			worst = f.Level
+		}
+	}
+	for _, m := range r.Metrics {
+		if m.Grade == "poor" || (m.Grade == "fair" && worst == "good") {
+			worst = m.Grade
+		}
+	}
+	rank := map[string]int{"poor": 0, "fair": 1, "info": 2, "good": 3}
+	sort.SliceStable(r.Notes, func(i, j int) bool { return rank[r.Notes[i].Level] < rank[r.Notes[j].Level] })
 	r.Verdict = worst
 	switch worst {
 	case "good":
-		r.Headline = "Your network looks healthy"
-		r.Findings = append([]string{"Everything measured is where it should be for a " + p.Name + "."}, r.Findings...)
+		r.Headline = "No problems you would notice"
+		r.Notes = append([]Finding{{"good", "Radio audio, remote control and file copies should all work smoothly over this connection."}}, r.Notes...)
 	case "fair":
-		r.Headline = "Your network works, but it is not as good as it should be"
+		r.Headline = "Works, but you may notice something"
 	default:
-		r.Headline = "Your network has problems"
+		r.Headline = "You will notice problems on this connection"
 	}
+	for _, f := range r.Notes {
+		r.Findings = append(r.Findings, f.Text)
+	}
+	r.Fixes = buildFixes(r, p)
 }
 
 // gradePractice: a loopback test never touches the network, so the numbers
@@ -410,9 +458,13 @@ func (r *Result) gradePractice() {
 	r.Fixes = nil
 	r.Verdict = "practice"
 	r.Headline = "Practice run finished"
-	r.Findings = []string{
-		"This test never left this computer, so the speeds are far higher than any real network and nothing is graded. It only shows you what a test looks like.",
-		"For a real test, start NetProof on a second computer and pick it from the list (or type its address).",
+	r.Notes = []Finding{
+		{"info", "This test never left this computer, so the speeds are far higher than any real network and nothing is graded. It only shows you what a test looks like."},
+		{"info", "For a real test, start NetProof on a second computer and pick it from the list (or type its address)."},
+	}
+	r.Findings = nil
+	for _, f := range r.Notes {
+		r.Findings = append(r.Findings, f.Text)
 	}
 }
 
@@ -452,7 +504,7 @@ func maxf(a, b float64) float64 {
 // Text is a plain text report for the console or for pasting into an email.
 func (r *Result) Text() string {
 	var b strings.Builder
-	mark := map[string]string{"good": "OK  ", "fair": "FAIR", "poor": "BAD ", "info": "    "}
+	mark := map[string]string{"good": "OK  ", "fair": "MAY ", "poor": "BAD ", "info": "    "}
 	fmt.Fprintf(&b, "NetProof %s report  %s\n", r.Version, r.Time)
 	remote := r.RemoteIP
 	if r.RemoteName != "" {
@@ -471,10 +523,13 @@ func (r *Result) Text() string {
 	fmt.Fprintf(&b, ">>> %s <<<\n\n", strings.ToUpper(r.Headline))
 	for _, m := range r.Metrics {
 		v := f2(m.Value) + " " + m.Unit
-		if m.Unit == "Mb/s" {
+		switch m.Unit {
+		case "Mb/s":
 			v = mbps(m.Value)
+		case "bytes":
+			v = itoa(int(m.Value)) + " bytes"
 		}
-		fmt.Fprintf(&b, "  [%s] %-34s %14s   expected: %s\n", mark[m.Grade], m.Label, v, m.Expect)
+		fmt.Fprintf(&b, "  [%s] %-34s %14s   %s\n", mark[m.Grade], m.Label, v, m.Expect)
 	}
 	fmt.Fprintf(&b, "\n  Delay range %s to %s, %d probes over %s, busy delay %s down / %s up\n",
 		ms(r.IdleRTTMin), ms(r.IdleRTTMax), r.Sent, r.LatencyMethod, ms(r.DownLoadedRTT), ms(r.UpLoadedRTT))
@@ -491,8 +546,19 @@ func (r *Result) Text() string {
 	if m := r.MTU; m != nil && m.PathMTU > 0 {
 		fmt.Fprintf(&b, "  Path MTU %d bytes, fragmented UDP %s\n\n", m.PathMTU, map[bool]string{true: "passes", false: "is DROPPED"}[m.FragmentsOK])
 	}
-	for _, f := range r.Findings {
-		fmt.Fprintf(&b, "  * %s\n", f)
+	heads := map[string]string{"poor": "YOU WILL NOTICE", "fair": "YOU MAY NOTICE", "info": "GOOD TO KNOW", "good": ""}
+	last := "-"
+	for _, f := range r.Notes {
+		if f.Level != last && heads[f.Level] != "" {
+			fmt.Fprintf(&b, "%s\n", heads[f.Level])
+		}
+		last = f.Level
+		fmt.Fprintf(&b, "  * %s\n", f.Text)
+	}
+	if len(r.Notes) == 0 {
+		for _, f := range r.Findings {
+			fmt.Fprintf(&b, "  * %s\n", f)
+		}
 	}
 	if len(r.Fixes) > 0 {
 		b.WriteString("\nHOW TO FIX IT\n")
