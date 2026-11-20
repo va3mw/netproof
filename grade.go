@@ -80,6 +80,13 @@ type Result struct {
 	LatencyMethod string  `json:"latencyMethod"`
 	Practice      bool    `json:"practice"`
 
+	UDPRateMbps float64    `json:"udpRateMbps"`
+	UDPDown     *UDPStats  `json:"udpDown,omitempty"`
+	UDPUp       *UDPStats  `json:"udpUp,omitempty"`
+	UDPNote     string     `json:"udpNote,omitempty"`
+	MTU         *MTUResult `json:"mtu,omitempty"`
+	Fixes       []Fix      `json:"fixes"`
+
 	ProfileKey  string   `json:"profileKey"`
 	ProfileName string   `json:"profileName"`
 	ProfileAuto bool     `json:"profileAuto"`
@@ -213,6 +220,27 @@ func (r *Result) Grade(profile string) {
 		r.Metrics = append(r.Metrics, Metric{Key: "loss", Label: "Packet loss", Value: 0, Unit: "%", Grade: "info", Expect: "not measured (UDP blocked)"})
 	}
 	r.Metrics = append(r.Metrics, Metric{Key: "bloat", Label: "Extra delay when busy", Value: bloat, Unit: "ms", Grade: grade3(bloat, p.BloatGood, p.BloatFair, false), Expect: "under " + ms(p.BloatGood)})
+	if m := r.MTU; m != nil && m.DFSupported && m.PathMTU > 0 {
+		g, exp := "good", "1500 on a LAN"
+		switch {
+		case m.PathMTU < 1280:
+			g = "poor"
+		case m.PathMTU < 1500 && (p.Key == "1g" || p.Key == "100m" || p.Key == "wifi"):
+			g = "fair"
+		}
+		if p.Key == "vpn" {
+			exp = "1280 or more over a VPN"
+		}
+		if m.FragTested && !m.FragmentsOK && g == "good" {
+			g = "fair"
+		}
+		r.Metrics = append(r.Metrics, Metric{Key: "mtu", Label: "Largest packet (MTU)", Value: float64(m.PathMTU), Unit: "bytes", Grade: g, Expect: exp})
+	}
+	if loss, jit, ok := r.udpWorst(); ok {
+		r.Metrics = append(r.Metrics,
+			Metric{Key: "udploss", Label: "UDP stream loss (" + f1(r.UDPRateMbps) + " Mb/s)", Value: loss, Unit: "%", Grade: grade3(loss, p.LossGood, p.LossFair, false), Expect: "0 %"},
+			Metric{Key: "udpjitter", Label: "UDP stream jitter", Value: jit, Unit: "ms", Grade: grade3(jit, p.JitGood, p.JitFair, false), Expect: "under " + ms(p.JitGood)})
+	}
 
 	worst := "good"
 	rank := map[string]int{"info": 0, "good": 0, "fair": 1, "poor": 2}
@@ -294,6 +322,42 @@ func (r *Result) Grade(profile string) {
 		}
 		add(g, s)
 	}
+	for _, d := range []struct {
+		st       *UDPStats
+		from, to string
+	}{{r.UDPDown, r.RemoteHost, r.LocalHost}, {r.UDPUp, r.LocalHost, r.RemoteHost}} {
+		if d.st == nil {
+			continue
+		}
+		lost := d.st.Sent - d.st.Received
+		if lost > 0 {
+			add(grade3(d.st.LossPct, p.LossGood, p.LossFair, false), fmt.Sprintf("While streaming %s Mb/s of UDP from %s to %s, %d of %d packets were lost (%s%%). Real-time UDP apps like ham radio audio, SDR panadapter and IQ streams cannot resend lost packets, so this means audio dropouts, gaps and disconnects.",
+				f1(r.UDPRateMbps), d.from, d.to, lost, d.st.Sent, f2(d.st.LossPct)))
+		}
+		if d.st.Mbps > 0 && d.st.Mbps < r.UDPRateMbps*0.9 && d.st.LossPct > 1 {
+			add("info", fmt.Sprintf("The link from %s to %s only delivered %s of the %s Mb/s UDP stream.", d.from, d.to, mbps(d.st.Mbps), f1(r.UDPRateMbps)))
+		}
+		if d.st.Received > 0 && float64(d.st.OutOfOrder)/float64(d.st.Received) > 0.001 {
+			add("info", fmt.Sprintf("%d UDP packets from %s to %s arrived out of order. Some apps treat these as lost. Usually caused by VPNs or links that split traffic over several paths.", d.st.OutOfOrder, d.from, d.to))
+		}
+	}
+	if g := gradeOf(r.Metrics, "udpjitter"); g == "fair" || g == "poor" {
+		_, jit, _ := r.udpWorst()
+		add(g, fmt.Sprintf("UDP stream jitter is %s (expected under %s). Real-time audio will need a bigger buffer (more delay) to avoid dropouts.", ms(jit), ms(p.JitGood)))
+	}
+	if r.UDPNote != "" {
+		add("info", r.UDPNote)
+	}
+	if m := r.MTU; m != nil && m.PathMTU > 0 {
+		if g := gradeOf(r.Metrics, "mtu"); g == "fair" || g == "poor" {
+			if m.PathMTU < 1500 {
+				add(g, fmt.Sprintf("The largest packet that gets through in one piece is %d bytes (a normal network carries 1500). Something on the path, usually a VPN, tunnel or PPPoE line, is shrinking packets.", m.PathMTU))
+			}
+		}
+		if m.FragTested && !m.FragmentsOK {
+			add("fair", "Large UDP packets that have to be split into pieces are being dropped. Apps that send big UDP packets will fail silently on this path.")
+		}
+	}
 	if g := gradeOf(r.Metrics, "bloat"); g != "good" {
 		add(g, fmt.Sprintf("When the network was busy, delay jumped from %s to %s. This is called bufferbloat: everything gets laggy while someone is downloading or uploading.", ms(r.IdleRTT), ms(maxf(r.DownLoadedRTT, r.UpLoadedRTT))))
 	}
@@ -311,6 +375,7 @@ func (r *Result) Grade(profile string) {
 	}
 
 	r.Findings = append(append(poor, fair...), notes...)
+	r.Fixes = buildFixes(r, p)
 	r.Verdict = worst
 	switch worst {
 	case "good":
@@ -326,7 +391,7 @@ func (r *Result) Grade(profile string) {
 // gradePractice: a loopback test never touches the network, so the numbers
 // only show how NetProof works. Nothing is graded.
 func (r *Result) gradePractice() {
-	r.ProfileKey, r.ProfileName, r.ProfileAuto = "practice", "Practice run (no network)", true
+	r.ProfileKey, r.ProfileName, r.ProfileAuto, r.AutoReason = "practice", "Practice run (no network)", true, ""
 	exp := "practice run: not graded"
 	r.Metrics = []Metric{
 		{Key: "down", Label: "Download (practice)", Value: r.DownMbps, Unit: "Mb/s", Grade: "info", Expect: exp},
@@ -336,12 +401,29 @@ func (r *Result) gradePractice() {
 		{Key: "loss", Label: "Packet loss", Value: r.LossPct, Unit: "%", Grade: "info", Expect: exp},
 		{Key: "bloat", Label: "Extra delay when busy", Value: maxf(0, maxf(r.DownLoadedRTT, r.UpLoadedRTT)-r.IdleRTT), Unit: "ms", Grade: "info", Expect: exp},
 	}
+	if loss, jit, ok := r.udpWorst(); ok {
+		r.Metrics = append(r.Metrics,
+			Metric{Key: "udploss", Label: "UDP stream loss (" + f1(r.UDPRateMbps) + " Mb/s)", Value: loss, Unit: "%", Grade: "info", Expect: exp},
+			Metric{Key: "udpjitter", Label: "UDP stream jitter", Value: jit, Unit: "ms", Grade: "info", Expect: exp})
+	}
+	r.Fixes = nil
 	r.Verdict = "practice"
 	r.Headline = "Practice run finished"
 	r.Findings = []string{
 		"This test never left this computer, so the speeds are far higher than any real network and nothing is graded. It only shows you what a test looks like.",
 		"For a real test, start NetProof on a second computer and pick it from the list (or type its address).",
 	}
+}
+
+// udpWorst returns the worse direction's UDP stream loss and jitter.
+func (r *Result) udpWorst() (float64, float64, bool) {
+	loss, jit, ok := 0.0, 0.0, false
+	for _, s := range []*UDPStats{r.UDPDown, r.UDPUp} {
+		if s != nil {
+			loss, jit, ok = maxf(loss, s.LossPct), maxf(jit, s.JitterMs), true
+		}
+	}
+	return loss, jit, ok
 }
 
 func gradeOf(ms []Metric, key string) string {
@@ -389,10 +471,32 @@ func (r *Result) Text() string {
 		}
 		fmt.Fprintf(&b, "  [%s] %-34s %14s   expected: %s\n", mark[m.Grade], m.Label, v, m.Expect)
 	}
-	fmt.Fprintf(&b, "\n  Delay range %s to %s, %d probes over %s, busy delay %s down / %s up\n\n",
+	fmt.Fprintf(&b, "\n  Delay range %s to %s, %d probes over %s, busy delay %s down / %s up\n",
 		ms(r.IdleRTTMin), ms(r.IdleRTTMax), r.Sent, r.LatencyMethod, ms(r.DownLoadedRTT), ms(r.UpLoadedRTT))
+	for _, d := range []struct {
+		name string
+		st   *UDPStats
+	}{{"UDP stream " + r.RemoteHost + " -> " + r.LocalHost, r.UDPDown}, {"UDP stream " + r.LocalHost + " -> " + r.RemoteHost, r.UDPUp}} {
+		if d.st != nil {
+			fmt.Fprintf(&b, "  %s at %s Mb/s: %d/%d received, %s%% lost, jitter %s, %d out of order, delivered %s\n",
+				d.name, f1(r.UDPRateMbps), d.st.Received, d.st.Sent, f2(d.st.LossPct), ms(d.st.JitterMs), d.st.OutOfOrder, mbps(d.st.Mbps))
+		}
+	}
+	b.WriteString("\n")
+	if m := r.MTU; m != nil && m.PathMTU > 0 {
+		fmt.Fprintf(&b, "  Path MTU %d bytes, fragmented UDP %s\n\n", m.PathMTU, map[bool]string{true: "passes", false: "is DROPPED"}[m.FragmentsOK])
+	}
 	for _, f := range r.Findings {
 		fmt.Fprintf(&b, "  * %s\n", f)
+	}
+	if len(r.Fixes) > 0 {
+		b.WriteString("\nHOW TO FIX IT\n")
+		for i, f := range r.Fixes {
+			fmt.Fprintf(&b, "\n%d. %s\n", i+1, f.Title)
+			for _, s := range f.Steps {
+				fmt.Fprintf(&b, "   - %s\n", s)
+			}
+		}
 	}
 	return b.String()
 }

@@ -9,13 +9,13 @@
   --bg:#f4f5f7; --card:#fff; --ink:#1b1f24; --mute:#626b76; --line:#dde1e6;
   --accent:#2563eb; --accent-ink:#fff;
   --good:#15803d; --good-bg:#dcfce7; --fair:#b45309; --fair-bg:#fef3c7; --poor:#b91c1c; --poor-bg:#fee2e2;
-  --chart:#2563eb; --chart2:#9333ea;
+  --chart:#2563eb; --chart2:#9333ea; --chart3:#0d9488;
 }
 @media (prefers-color-scheme: dark){
   :root{
     --bg:#111418; --card:#1a1e24; --ink:#e8eaed; --mute:#9aa3ad; --line:#2c323a;
     --accent:#3b82f6; --good:#4ade80; --good-bg:#14301f; --fair:#fbbf24; --fair-bg:#3a2c0d; --poor:#f87171; --poor-bg:#3b1515;
-    --chart:#60a5fa; --chart2:#c084fc;
+    --chart:#60a5fa; --chart2:#c084fc; --chart3:#2dd4bf;
   }
 }
 *{box-sizing:border-box}
@@ -74,6 +74,10 @@ th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertic
 th{color:var(--mute);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
 td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
 details summary{cursor:pointer;font-weight:600}
+#fixes h3{font-size:18px;margin:22px 0 4px}
+.fix{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:10px}
+.fix b{display:block;margin-bottom:6px}
+.fix ol{margin:0;padding-left:20px} .fix li{margin:5px 0}
 .err{background:var(--poor-bg);color:var(--poor);border-radius:8px;padding:12px 14px;margin-top:12px}
 .meta{font-size:13px;color:var(--mute);margin-top:12px}
 .hide{display:none!important}
@@ -108,7 +112,7 @@ details summary{cursor:pointer;font-weight:600}
       <select id="ptype"></select>
       <p class="hint" style="margin-top:4px">This sets what &ldquo;good&rdquo; means. Automatic works it out from the addresses and the delay; pick one if you know better.</p>
     </div>
-    <p class="hint">The test takes about 30 seconds: delay &amp; jitter, then speed in both directions.</p>
+    <p class="hint">The test takes about 45 seconds: delay &amp; jitter, packet size, TCP speed both ways, then a steady UDP stream both ways (like radio audio and SDR data).</p>
     <div class="practiceBox">
       <div><b>New to NetProof?</b><br><span class="hint" style="margin:0">Try a practice run on just this computer. No second computer needed; the numbers are not graded.</span></div>
       <button class="ghost" id="practice">Practice run</button>
@@ -139,6 +143,7 @@ details summary{cursor:pointer;font-weight:600}
       </div>
       <div class="metrics" id="metrics"></div>
       <div class="meta" id="meta"></div>
+      <div id="fixes"></div>
       <div class="row" style="margin-top:14px;gap:8px;flex-wrap:wrap">
         <button class="ghost" id="copy">Copy report</button>
         <a id="save" href="/api/report.txt"><button class="ghost">Save report</button></a>
@@ -179,7 +184,7 @@ async function api(path, body){
 }
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmtMbps = v => v >= 100 ? Math.round(v) : v.toFixed(1);
-const fmtVal = m => m.unit === "Mb/s" ? fmtMbps(m.value) : (m.unit === "%" ? m.value.toFixed(2) : (m.value < 10 ? m.value.toFixed(2) : m.value.toFixed(1)));
+const fmtVal = m => m.unit === "bytes" ? Math.round(m.value) : m.unit === "Mb/s" ? fmtMbps(m.value) : (m.unit === "%" ? m.value.toFixed(2) : (m.value < 10 ? m.value.toFixed(2) : m.value.toFixed(1)));
 const gradeWord = {good:"Good", fair:"Fair", poor:"Bad", info:"Info"};
 
 const PTYPE_LABEL = {"1g":"Same building, wired, gigabit (1 Gb/s)","100m":"Same building, wired, 100 Mb/s","wifi":"Wi-Fi","vpn":"VPN, Tailscale, remote site or internet"};
@@ -231,7 +236,8 @@ async function start(target){
   catch(e){ $("run").classList.remove("hide"); $("runErr").textContent = e.message; $("runErr").classList.remove("hide"); }
 }
 
-const PH = [["connect","Connect"],["latency","Delay & jitter"],["download","Download"],["upload","Upload"]];
+const PH = [["connect","Connect"],["latency","Delay & jitter"],["mtu","Packet size"],["download","Download"],["upload","Upload"],["udpdown","UDP stream in"],["udpup","UDP stream out"]];
+const THR = ["download","upload","udpdown","udpup"];
 function renderRun(){
   const t = S.test;
   const show = t.running || t.phase === "error";
@@ -242,7 +248,7 @@ function renderRun(){
   $("phases").innerHTML = PH.map((p,i) => `<span class="${i === idx ? "on" : (i < idx ? "ok" : "")}">${i < idx ? "&#10003; " : ""}${p[1]}</span>`).join("");
   $("prog").style.width = (t.progress*100).toFixed(1) + "%";
   if (t.phase === "latency") $("live").innerHTML = `${(t.lastRtt||0).toFixed(2)} <small>ms delay</small>`;
-  else if (t.phase === "download" || t.phase === "upload") $("live").innerHTML = `${fmtMbps(t.currentMbps||0)} <small>Mb/s ${t.phase}</small>`;
+  else if (THR.includes(t.phase)) $("live").innerHTML = `${fmtMbps(t.currentMbps||0)} <small>Mb/s ${esc(t.phaseLabel)}</small>`;
   else $("live").innerHTML = `&hellip;`;
   $("cancel").classList.toggle("hide", !t.running);
   $("go").disabled = t.running; $("practice").disabled = t.running;
@@ -258,18 +264,18 @@ function drawChart(samples){
   const g = c.getContext("2d"); g.scale(dpr,dpr); g.clearRect(0,0,w,h);
   const cs = getComputedStyle(document.documentElement);
   const line = cs.getPropertyValue("--line"), mute = cs.getPropertyValue("--mute");
-  const thr = samples.filter(s => (s.phase === "download" || s.phase === "upload"));
+  const thr = samples.filter(s => THR.includes(s.phase));
   const T = 29, maxM = Math.max(10, ...thr.map(s => s.mbps)) * 1.15;
   const x = t => 40 + (w-50) * Math.min(t,T)/T, y = v => h-14 - (h-34) * v/maxM;
   g.strokeStyle = line; g.fillStyle = mute; g.font = "11px system-ui"; g.lineWidth = 1;
   for (let i=0;i<=4;i++){ const v = maxM*i/4; g.beginPath(); g.moveTo(40,y(v)); g.lineTo(w-10,y(v)); g.stroke(); g.fillText(v>=100?Math.round(v):v.toFixed(0), 4, y(v)+4); }
   g.fillText("Mb/s", 4, 9);
-  for (const ph of ["download","upload"]){
+  for (const ph of THR){
     const pts = thr.filter(s => s.phase === ph && s.mbps > 0);
     if (!pts.length) continue;
-    g.strokeStyle = cs.getPropertyValue(ph === "download" ? "--chart" : "--chart2"); g.lineWidth = 2; g.beginPath();
+    g.strokeStyle = cs.getPropertyValue({download:"--chart",upload:"--chart2"}[ph] || "--chart3"); g.lineWidth = 2; g.beginPath();
     pts.forEach((s,i) => i ? g.lineTo(x(s.t),y(s.mbps)) : g.moveTo(x(s.t),y(s.mbps))); g.stroke();
-    g.fillStyle = g.strokeStyle; g.fillText(ph, x(pts[0].t)+4, 12);
+    g.fillStyle = g.strokeStyle; g.fillText({download:"download",upload:"upload",udpdown:"UDP in",udpup:"UDP out"}[ph], x(pts[0].t)+4, 12);
   }
 }
 
@@ -290,7 +296,12 @@ function renderResult(res, isIncoming){
   const side = (iface, kind, link) => iface ? `${esc(iface)} (${{wired:"wired",wifi:"Wi-Fi",vpn:"VPN",virtual:"virtual"}[kind]||kind}${link>0 && kind!=="vpn" ? ", link " + (link>=1000 ? link/1000 + " Gb/s" : link + " Mb/s") : ""})` : "unknown";
   $("meta").innerHTML = `${esc(res.localHost)}: ${side(res.localIface,res.localKind,res.localLinkMbps)} &nbsp;&middot;&nbsp; ${esc(res.remoteHost)}: ${side(res.remoteIface,res.remoteKind,res.remoteLinkMbps)}<br>
     Compared against <b>${esc(res.profileName)}</b>${res.profileAuto && res.autoReason ? " (automatic: " + esc(res.autoReason) + ")" : (res.practice ? "" : " (your choice)")}.<br>
-    Delay ranged ${res.idleRttMin.toFixed(2)} to ${res.idleRttMax.toFixed(2)} ms over ${res.sent} ${esc(res.latencyMethod)} probes. Busy delay: ${res.downLoadedRtt.toFixed(2)} ms (download), ${res.upLoadedRtt.toFixed(2)} ms (upload). ${esc(res.time)}`;
+    Delay ranged ${res.idleRttMin.toFixed(2)} to ${res.idleRttMax.toFixed(2)} ms over ${res.sent} ${esc(res.latencyMethod)} probes. Busy delay: ${res.downLoadedRtt.toFixed(2)} ms (download), ${res.upLoadedRtt.toFixed(2)} ms (upload).
+    ${udpLine(res.udpDown, res.remoteHost + " → " + res.localHost, res.udpRateMbps)}${udpLine(res.udpUp, res.localHost + " → " + res.remoteHost, res.udpRateMbps)}
+    ${esc(res.time)}`;
+  const fx = res.fixes || [];
+  $("fixes").innerHTML = fx.length ? `<h3>How to fix it</h3><p class="hint" style="margin:0">Start at the top: each step is in the order most likely to help.</p>` +
+    fx.map((f,i) => `<div class="fix"><b>${i+1}. ${esc(f.title)}</b><ol>${f.steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol></div>`).join("") : "";
   $("cmpBox").classList.toggle("hide", !!res.practice);
   const sel = $("profile");
   const want = (S.profile === "auto" ? "auto" : res.profileKey);
@@ -301,13 +312,18 @@ function renderResult(res, isIncoming){
   $("copy").dataset.which = isIncoming ? "incoming" : "";
 }
 
+function udpLine(st, dir, rate){
+  if (!st) return "";
+  return `<br>UDP stream ${esc(dir)} at ${rate} Mb/s: ${st.received} of ${st.sent} packets arrived (${st.lossPct.toFixed(2)}% lost), jitter ${st.jitterMs.toFixed(2)} ms, ${st.outOfOrder} out of order.`;
+}
+
 function renderIncoming(){
   const inc = S.incoming, b = $("incoming");
   if (!inc || S.test.running){ b.classList.add("hide"); return; }
   const fresh = (Date.now() - new Date(inc.started).getTime()) < 60000;
   if (inc.result){ b.classList.add("hide"); return; }
   if (!fresh){ b.classList.add("hide"); return; }
-  b.innerHTML = `<div><b>${esc(inc.fromHost)}</b> (${esc(inc.fromIP)}) is testing this computer now. Results will show here in about 30 seconds.</div>`;
+  b.innerHTML = `<div><b>${esc(inc.fromHost)}</b> (${esc(inc.fromIP)}) is testing this computer now. Results will show here in about 45 seconds.</div>`;
   b.classList.remove("hide");
 }
 

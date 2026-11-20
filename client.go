@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// The hard coded test plan. Total is about 30 seconds.
+// The hard coded test plan. Total is about 45 seconds.
 const (
 	latencyDur  = 6 * time.Second
 	latencyIvl  = 20 * time.Millisecond // 50 probes per second
@@ -47,7 +47,7 @@ type TestState struct {
 	started     time.Time `json:"-"`
 }
 
-const planSeconds = 6.0 + 10 + 10 + 3
+const planSeconds = 6.0 + 1.5 + 10 + 10 + 8 + 8 + 3
 
 func (a *App) setPhase(phase, label string) {
 	a.mu.Lock()
@@ -255,6 +255,13 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 	r.Sent, r.Lost = lat.sent, lat.lost()
 	r.LossPct = lat.lossPct()
 
+	// 1b. Largest packet that gets through (MTU), and fragment handling.
+	if lat.method == "UDP" {
+		a.setPhase("mtu", "Checking packet size (MTU)")
+		r.MTU = a.mtuTest(ctx, host, port)
+		a.tick(-1, -1)
+	}
+
 	// 2. Download (far end sends to us), with a slow latency probe alongside.
 	a.setPhase("download", "Download test ("+h.Host+" → "+a.host+")")
 	r.DownMbps, r.DownLoadedRTT, err = a.throughputWithProbe(ctx, host, port, "download", lat.method)
@@ -268,9 +275,38 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 		return nil, err
 	}
 
+	// 4 and 5. Fixed-rate UDP streams, like radio audio, panadapter and IQ data.
 	a.mu.Lock()
 	prof := a.profile
 	a.mu.Unlock()
+	streamProf := prof
+	if practice {
+		streamProf = "practice"
+	} else if streamProf == "" || streamProf == "auto" {
+		streamProf, _ = r.autoProfile()
+	}
+	r.UDPRateMbps = udpRateFor(streamProf, r.DownMbps, r.UpMbps)
+	if lat.method != "UDP" {
+		r.UDPNote = "UDP is blocked between these computers, so the UDP stream test could not run. Ham radio audio and SDR streams will not work through this path either."
+	} else {
+		a.setPhase("udpdown", fmt.Sprintf("UDP stream %s → %s at %s Mb/s", h.Host, a.host, f1(r.UDPRateMbps)))
+		if st, err := a.udpStreamDown(ctx, host, port, r.UDPRateMbps); err == nil {
+			r.UDPDown = st
+		} else if ctx.Err() != nil {
+			return nil, ctx.Err()
+		} else {
+			r.UDPNote = "UDP stream " + h.Host + " → " + a.host + ": " + err.Error()
+		}
+		a.setPhase("udpup", fmt.Sprintf("UDP stream %s → %s at %s Mb/s", a.host, h.Host, f1(r.UDPRateMbps)))
+		if st, err := a.udpStreamUp(ctx, host, port, r.UDPRateMbps); err == nil {
+			r.UDPUp = st
+		} else if ctx.Err() != nil {
+			return nil, ctx.Err()
+		} else {
+			r.UDPNote = strings.TrimSpace(r.UDPNote + " UDP stream " + a.host + " → " + h.Host + ": " + err.Error())
+		}
+	}
+
 	r.Grade(prof)
 
 	// Tell the far end so its screen shows the same results.

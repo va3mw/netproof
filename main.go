@@ -21,7 +21,7 @@ import (
 
 const (
 	appName     = "NetProof"
-	appVersion  = "1.1.1"
+	appVersion  = "1.2.0"
 	defDataPort = 47800 // TCP + UDP: test traffic and control
 	defDiscPort = 47801 // UDP: LAN discovery broadcasts
 	defUIPort   = 47880 // HTTP on 127.0.0.1: the user interface
@@ -122,7 +122,7 @@ func main() {
 
 func (a *App) runCLI(target string) int {
 	// Listen too, so UDP echo from the far side has somewhere to go if needed.
-	fmt.Printf("%s %s: testing %s (about 30 seconds)\n", appName, appVersion, target)
+	fmt.Printf("%s %s: testing %s (about 45 seconds)\n", appName, appVersion, target)
 	last := ""
 	done := make(chan struct{})
 	go func() {

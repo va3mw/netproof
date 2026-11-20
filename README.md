@@ -8,7 +8,7 @@ Network speed, delay and jitter tester that anyone can run. One file, nothing to
    A browser window opens by itself.
 2. On **one** of them, click **Test** next to the other computer's name.
    If it is not listed (VPN, Tailscale, another subnet), type its address and click **Start test**.
-3. Wait about 30 seconds. Both screens show the verdict.
+3. Wait about 45 seconds. Both screens show the verdict and a "How to fix it" checklist.
 
 You do not need to choose "client" or "server". Whichever computer presses Test drives the test;
 the other one answers automatically.
@@ -40,14 +40,29 @@ Two ways, so new users can get used to it before involving a second machine:
   "This computer"; press **Test** in either window and watch both screens, just like a real test.
   The second copy uses ports 47810 and 47890.
 
-## What it measures (about 30 s total)
+## What it measures (about 45 s total)
 
 | Phase | Time | How |
 |---|---|---|
-| Delay, jitter, loss | 6 s | 300 UDP probes (falls back to TCP if UDP is blocked) |
+| Delay, jitter, loss | 6 s | 300 small UDP probes (falls back to TCP if UDP is blocked) |
+| Packet size (MTU) | ~1 s | largest UDP packet that crosses unsplit (Don't Fragment), and whether split packets get through |
 | Download | 10 s | 4 parallel TCP streams, far end to this end, first second ignored |
 | Upload | 10 s | same, other direction, measured at the receiving end |
 | Busy delay | during both | 10 probes/s while the link is full (bufferbloat) |
+| UDP stream in | 8 s | steady 1200 byte UDP packets at a fixed rate, like radio audio, panadapter and IQ streams: loss, one-way jitter, out of order |
+| UDP stream out | 8 s | same, other direction |
+
+UDP stream rate: 100 Mb/s on a gigabit LAN, 30 Mb/s on 100 Mb or Wi-Fi, 10 Mb/s over a VPN,
+never more than 70% of the TCP speed just measured (so a slow link is tested for loss, not overrun).
+A computer only streams to an address that has just connected to it over TCP.
+
+## Diagnosis
+
+Every problem found comes with a "How to fix it" checklist in plain language: link stuck at
+100 Mb/s, duplex, packet loss on a wired LAN (cables, RF pickup, switches), slow LAN, Wi-Fi,
+bufferbloat (SQM / cake / fq_codel), jitter, VPN path (relays, Tailscale DERP), MTU and
+fragmentation (MSS clamping, tunnel MTU), and UDP blocked by firewalls. The checklists are also
+in the saved and copied text report.
 
 ## Reference values (healthy network)
 

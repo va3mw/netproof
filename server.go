@@ -28,6 +28,8 @@ type Request struct {
 	DurationMs int     `json:"durationMs,omitempty"`
 	FromHost   string  `json:"fromHost,omitempty"`
 	Result     *Result `json:"result,omitempty"`
+	Session    string  `json:"session,omitempty"`
+	Sent       int     `json:"sent,omitempty"`
 }
 
 // HelloReply describes the far end.
@@ -86,6 +88,8 @@ type App struct {
 	incoming *Incoming
 	lastRes  *Result
 
+	us udpServer // UDP stream test state
+
 	ifCache   []IfaceInfo
 	ifCacheAt time.Time
 	disc      *net.UDPConn
@@ -139,14 +143,23 @@ func (a *App) serveTCP(ln net.Listener) {
 }
 
 func (a *App) serveUDPEcho(uc *net.UDPConn) {
-	buf := make([]byte, 2048)
+	_ = uc.SetReadBuffer(4 << 20)
+	_ = uc.SetWriteBuffer(4 << 20)
+	buf := make([]byte, 65536)
 	for {
 		n, from, err := uc.ReadFromUDP(buf)
 		if err != nil {
 			continue
 		}
-		if n >= 4 && bytes.Equal(buf[:4], []byte("NPRF")) {
+		if n < 4 {
+			continue
+		}
+		if bytes.Equal(buf[:4], []byte("NPRF")) {
 			_, _ = uc.WriteToUDP(buf[:n], from)
+			continue
+		}
+		if buf[0] == 'N' && buf[1] == 'P' && buf[2] == 'R' {
+			a.handleStreamPacket(uc, buf[:n], from, time.Now())
 		}
 	}
 }
@@ -207,6 +220,7 @@ func (a *App) handle(c net.Conn) {
 		return
 	}
 	_ = c.SetReadDeadline(time.Time{})
+	a.us.allow(remoteIP(c))
 	dur := time.Duration(req.DurationMs) * time.Millisecond
 	if dur < time.Second {
 		dur = time.Second
@@ -218,6 +232,14 @@ func (a *App) handle(c net.Conn) {
 	switch req.Op {
 	case "hello":
 		_ = writeJSONLine(c, a.helloReply(c.LocalAddr()))
+
+	case "udpstats": // results of a UDP stream the other side sent us
+		st := UDPStats{Sent: req.Sent, LossPct: 100}
+		if rx := a.us.take(req.Session); rx != nil {
+			st = rx.stats(req.Sent)
+		}
+		_ = c.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		_ = writeJSONLine(c, st)
 
 	case "start":
 		a.mu.Lock()
