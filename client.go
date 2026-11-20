@@ -230,6 +230,16 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 			r.LocalIP = localIPFor(ips[0])
 		}
 	}
+	if !practice {
+		if ips, _ := net.LookupHost(host); len(ips) > 0 {
+			r.RemoteIP = ips[0]
+			if onLocalSubnet(ips[0]) {
+				r.Route = "local"
+			} else {
+				r.Route = "routed"
+			}
+		}
+	}
 	if ifc, ok := a.ifaceForIP(r.LocalIP); ok {
 		r.LocalIface, r.LocalKind, r.LocalLinkMbps, r.LocalDuplex = ifc.Name, ifc.Kind, ifc.LinkMbps, ifc.Duplex
 	}

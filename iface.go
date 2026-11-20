@@ -187,3 +187,32 @@ func localIPFor(target string) string {
 	}
 	return ""
 }
+
+// onLocalSubnet reports whether ip is on a network this computer is directly
+// attached to (no router in between). Point-to-point /32 VPN addresses never are.
+func onLocalSubnet(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+	ifs, _ := net.Interfaces()
+	for _, ifc := range ifs {
+		if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, _ := ifc.Addrs()
+		for _, ad := range addrs {
+			ipn, ok := ad.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			if ones, bits := ipn.Mask.Size(); ones == bits {
+				continue
+			}
+			if ipn.Contains(ip) {
+				return true
+			}
+		}
+	}
+	return false
+}

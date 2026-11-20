@@ -21,7 +21,7 @@ import (
 
 const (
 	appName     = "NetProof"
-	appVersion  = "1.0.0"
+	appVersion  = "1.1.0"
 	defDataPort = 47800 // TCP + UDP: test traffic and control
 	defDiscPort = 47801 // UDP: LAN discovery broadcasts
 	defUIPort   = 47880 // HTTP on 127.0.0.1: the user interface

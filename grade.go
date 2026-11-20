@@ -32,7 +32,7 @@ var profiles = map[string]Profile{
 		RTTGood: 1, RTTFair: 3, JitGood: 0.5, JitFair: 2, LossGood: 0.01, LossFair: 0.5, BloatGood: 20, BloatFair: 60},
 	"wifi": {Key: "wifi", Name: "Wi-Fi", ExpectMbps: 0, ThrGood: 300, ThrFair: 100,
 		RTTGood: 4, RTTFair: 15, JitGood: 2, JitFair: 6, LossGood: 0.1, LossFair: 1, BloatGood: 30, BloatFair: 100},
-	"vpn": {Key: "vpn", Name: "VPN / Tailscale / Internet", ExpectMbps: 0, ThrGood: 0, ThrFair: 0,
+	"vpn": {Key: "vpn", Name: "VPN / remote site / Internet", ExpectMbps: 0, ThrGood: 0, ThrFair: 0,
 		RTTGood: 30, RTTFair: 80, JitGood: 3, JitFair: 10, LossGood: 0.1, LossFair: 1, BloatGood: 30, BloatFair: 100},
 }
 
@@ -83,26 +83,39 @@ type Result struct {
 	ProfileKey  string   `json:"profileKey"`
 	ProfileName string   `json:"profileName"`
 	ProfileAuto bool     `json:"profileAuto"`
+	AutoReason  string   `json:"autoReason"`
+	Route       string   `json:"route"` // "local": same subnet, "routed": through a router/VPN
 	Metrics     []Metric `json:"metrics"`
 	Verdict     string   `json:"verdict"`
 	Headline    string   `json:"headline"`
 	Findings    []string `json:"findings"`
 }
 
-// autoProfile guesses what the connection is supposed to be.
-func (r *Result) autoProfile() string {
+// autoProfile guesses what the connection is supposed to be, and why.
+func (r *Result) autoProfile() (string, string) {
 	ip := r.RemoteIP
-	if r.LocalKind == "vpn" || r.RemoteKind == "vpn" || (ip != "" && tailscaleNet.Contains(parseIP(ip))) {
-		return "vpn"
-	}
-	if r.LocalKind == "wifi" || r.RemoteKind == "wifi" {
-		return "wifi"
+	switch {
+	case ip != "" && tailscaleNet.Contains(parseIP(ip)):
+		return "vpn", "the other computer was reached by its Tailscale address"
+	case r.LocalKind == "vpn":
+		return "vpn", "this computer used its VPN connection (" + r.LocalIface + ")"
+	case r.Route == "routed" && r.IdleRTT > 3:
+		return "vpn", fmt.Sprintf("the other computer is on a different network (%s) and delay is %s, so traffic goes through a router, VPN or the internet", ip, ms(r.IdleRTT))
+	case r.Route == "routed":
+		return "1g", fmt.Sprintf("the other computer is on a different subnet (%s) but delay is LAN-like, so this looks like a routed LAN", ip)
+	case r.IdleRTT > 5 && r.LocalKind != "wifi" && r.RemoteKind != "wifi":
+		return "vpn", fmt.Sprintf("delay is %s, far higher than any local network, so traffic must be leaving the building", ms(r.IdleRTT))
+	case r.LocalKind == "wifi" || r.RemoteKind == "wifi":
+		return "wifi", "one of the computers is on Wi-Fi"
 	}
 	link := minNonZero(r.LocalLinkMbps, r.RemoteLinkMbps)
 	if link > 0 && link < 1000 {
-		return "100m"
+		return "100m", "an adapter is connected at " + fmtLink(link)
 	}
-	return "1g"
+	if link >= 1000 {
+		return "1g", "both computers are on the same network, wired at " + fmtLink(link) + " or faster"
+	}
+	return "1g", "both computers are on the same network (link speed unknown, assuming gigabit)"
 }
 
 func minNonZero(a, b int) int {
@@ -157,8 +170,9 @@ func mbps(v float64) string {
 // plain English verdict.
 func (r *Result) Grade(profile string) {
 	r.ProfileAuto = profile == "" || profile == "auto"
+	r.AutoReason = ""
 	if r.ProfileAuto {
-		profile = r.autoProfile()
+		profile, r.AutoReason = r.autoProfile()
 	}
 	p := profiles[profile]
 	r.ProfileKey, r.ProfileName = p.Key, p.Name
@@ -286,8 +300,11 @@ func (r *Result) Grade(profile string) {
 	if r.LatencyMethod != "UDP" {
 		add("info", "UDP packets were blocked (probably by a firewall), so delay was measured over TCP and packet loss could not be measured. Allow NetProof through the firewall on both computers for a complete test.")
 	}
+	if r.Route == "routed" && (p.Key == "1g" || p.Key == "100m") && !r.ProfileAuto && r.IdleRTT > 3 {
+		add("info", fmt.Sprintf("The other computer is on a different network (%s) and delay is %s. If this connection goes through a VPN or the internet, choose \"VPN / remote site / Internet\" for a fair comparison.", r.RemoteIP, ms(r.IdleRTT)))
+	}
 	if p.Key == "vpn" {
-		add("info", "This test ran over a VPN. VPN speed depends on both internet connections and on how the VPN routes traffic, so there is no fixed speed target. Delay, jitter and loss matter most here.")
+		add("info", "This test went through a VPN, a router between sites, or the internet. Speed then depends on both internet connections and on how the VPN routes traffic, so there is no fixed speed target. Delay, jitter and loss matter most here.")
 		if r.IdleRTT > 0 && p.Key == "vpn" && tailscaleNet.Contains(parseIP(r.RemoteIP)) && r.IdleRTT > 40 {
 			add("info", "If Tailscale is relaying this connection (\"relay\" in tailscale status), delay will be higher than a direct connection.")
 		}
@@ -358,8 +375,10 @@ func (r *Result) Text() string {
 	fmt.Fprintf(&b, "This end:  %s\n", sideDesc(r.LocalIface, r.LocalKind, r.LocalLinkMbps))
 	fmt.Fprintf(&b, "Far end:   %s\n", sideDesc(r.RemoteIface, r.RemoteKind, r.RemoteLinkMbps))
 	auto := ""
-	if r.ProfileAuto {
-		auto = " (auto detected)"
+	if r.ProfileAuto && r.AutoReason != "" {
+		auto = " (auto: " + r.AutoReason + ")"
+	} else if !r.ProfileAuto {
+		auto = " (chosen by user)"
 	}
 	fmt.Fprintf(&b, "Compared against: %s%s\n\n", r.ProfileName, auto)
 	fmt.Fprintf(&b, ">>> %s <<<\n\n", strings.ToUpper(r.Headline))

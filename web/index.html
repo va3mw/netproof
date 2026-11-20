@@ -57,6 +57,7 @@ canvas{width:100%;height:170px;display:block;margin-top:10px}
 .verdict.fair{background:var(--fair-bg)} .verdict.fair h3{color:var(--fair)}
 .verdict.poor{background:var(--poor-bg)} .verdict.poor h3{color:var(--poor)}
 .verdict.practice{background:var(--card);border:1px dashed var(--accent)} .verdict.practice h3{color:var(--accent)}
+.ctype{margin-top:14px} .ctype select{margin-top:6px}
 .practiceBox{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 .verdict ul{margin:10px 0 0;padding-left:20px} .verdict li{margin:6px 0}
 .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
@@ -101,6 +102,11 @@ details summary{cursor:pointer;font-weight:600}
     <div class="row wrap" style="margin-top:6px">
       <input id="target" placeholder="Or type its address, for example 192.168.1.50 or 100.101.102.103" autocomplete="off">
       <button id="go">Start test</button>
+    </div>
+    <div class="ctype">
+      <label for="ptype"><b>What kind of connection is this?</b></label>
+      <select id="ptype"></select>
+      <p class="hint" style="margin-top:4px">This sets what &ldquo;good&rdquo; means. Automatic works it out from the addresses and the delay; pick one if you know better.</p>
     </div>
     <p class="hint">The test takes about 30 seconds: delay &amp; jitter, then speed in both directions.</p>
     <div class="practiceBox">
@@ -175,6 +181,14 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const fmtMbps = v => v >= 100 ? Math.round(v) : v.toFixed(1);
 const fmtVal = m => m.unit === "Mb/s" ? fmtMbps(m.value) : (m.unit === "%" ? m.value.toFixed(2) : (m.value < 10 ? m.value.toFixed(2) : m.value.toFixed(1)));
 const gradeWord = {good:"Good", fair:"Fair", poor:"Bad", info:"Info"};
+
+const PTYPE_LABEL = {"1g":"Same building, wired, gigabit (1 Gb/s)","100m":"Same building, wired, 100 Mb/s","wifi":"Wi-Fi","vpn":"VPN, Tailscale, remote site or internet"};
+function renderPtype(){
+  const sel = $("ptype");
+  const opts = `<option value="auto">Automatic (recommended)</option>` + S.profiles.map(p => `<option value="${p.key}">${esc(PTYPE_LABEL[p.key] || p.name)}</option>`).join("");
+  if (sel.dataset.fp !== opts){ sel.innerHTML = opts; sel.dataset.fp = opts; }
+  if (document.activeElement !== sel) sel.value = S.profile;
+}
 
 function renderIfaces(){
   const ifs = S.interfaces || [];
@@ -275,6 +289,7 @@ function renderResult(res, isIncoming){
     </div>`).join("");
   const side = (iface, kind, link) => iface ? `${esc(iface)} (${{wired:"wired",wifi:"Wi-Fi",vpn:"VPN",virtual:"virtual"}[kind]||kind}${link>0 && kind!=="vpn" ? ", link " + (link>=1000 ? link/1000 + " Gb/s" : link + " Mb/s") : ""})` : "unknown";
   $("meta").innerHTML = `${esc(res.localHost)}: ${side(res.localIface,res.localKind,res.localLinkMbps)} &nbsp;&middot;&nbsp; ${esc(res.remoteHost)}: ${side(res.remoteIface,res.remoteKind,res.remoteLinkMbps)}<br>
+    Compared against <b>${esc(res.profileName)}</b>${res.profileAuto && res.autoReason ? " (automatic: " + esc(res.autoReason) + ")" : (res.practice ? "" : " (your choice)")}.<br>
     Delay ranged ${res.idleRttMin.toFixed(2)} to ${res.idleRttMax.toFixed(2)} ms over ${res.sent} ${esc(res.latencyMethod)} probes. Busy delay: ${res.downLoadedRtt.toFixed(2)} ms (download), ${res.upLoadedRtt.toFixed(2)} ms (upload). ${esc(res.time)}`;
   $("cmpBox").classList.toggle("hide", !!res.practice);
   const sel = $("profile");
@@ -302,7 +317,7 @@ async function poll(){
     S = await r.json();
   } catch(e){ $("me").textContent = "NetProof has stopped. Start it again to continue."; return; }
   $("me").textContent = `This computer: ${S.host} · v${S.version}`;
-  renderIfaces(); renderPeers(); renderRun(); renderIncoming();
+  renderIfaces(); renderPtype(); renderPeers(); renderRun(); renderIncoming();
   // Show whichever result is newest: ours, or one the other side ran against us.
   let res = S.result, inc = false;
   if (S.incoming && S.incoming.result && (!res || S.incoming.result.time > res.time)){ res = S.incoming.result; inc = true; }
@@ -315,6 +330,7 @@ $("practice").onclick = () => start("127.0.0.1");
 $("target").addEventListener("keydown", e => { userTyped = true; if (e.key === "Enter") start($("target").value); });
 $("cancel").onclick = () => api("/api/cancel");
 $("again").onclick = () => { const t = (S.result && !$("copy").dataset.which) ? S.test.target : (S.incoming ? S.incoming.fromIP : $("target").value); start(t || $("target").value); };
+$("ptype").onchange = e => api("/api/profile", {profile:e.target.value}).then(poll);
 $("profile").onchange = e => api("/api/profile", {profile:e.target.value}).then(poll);
 $("copy").onclick = async () => {
   const txt = await (await fetch("/api/report.txt" + ($("copy").dataset.which ? "?which=incoming" : ""))).text();

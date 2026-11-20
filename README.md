@@ -53,6 +53,12 @@ Two ways, so new users can get used to it before involving a second machine:
 | Loss | 0 % | 0 % | < 0.1 % | < 0.1 % |
 | Extra delay when busy | < 20 ms | < 10 ms | < 30 ms | < 30 ms |
 
+Before testing, users can say what kind of connection it is ("What kind of connection is
+this?": gigabit LAN, 100 Mb LAN, Wi-Fi, or VPN / remote site / internet), or leave it on
+Automatic. Automatic treats the link as a VPN or remote site when the other computer is on a
+different subnet and delay is above 3 ms (site-to-site VPNs look like plain Ethernet otherwise),
+or when delay is above 5 ms on any wired link, and shows the reason with the results.
+
 The expected profile is picked automatically from the adapters' link speed and type (wired,
 Wi-Fi, VPN, Tailscale 100.x addresses) and can be changed on the results screen. It also flags
 adapters stuck at 100 Mb/s or 10 Mb/s, half duplex, and lopsided up/down speeds.
