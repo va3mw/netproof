@@ -4,7 +4,8 @@ A network tester that anyone can run. It measures speed, delay, jitter, packet l
 size between two computers, and says in plain language whether you would notice a problem and
 how to fix it. One file, nothing to install.
 
-**[Download the latest release](https://github.com/va3mw/netproof/releases/latest)**
+**[Download the latest release](https://github.com/va3mw/netproof/releases/latest)** ·
+**[Project page](https://va3mw.github.io/netproof/)**
 
 Built for ham radio operators, whose remote audio, panadapter and SDR streams are UDP and
 suffer from problems an ordinary speed test never shows.
