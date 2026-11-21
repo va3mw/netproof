@@ -38,7 +38,6 @@ type HelloReply struct {
 	Proto       int        `json:"proto,omitempty"`       // wire protocol version (0 = before 1.7.0)
 	Features    []string   `json:"features,omitempty"`    // tests and functions it supports
 	UpdateState string     `json:"updateState,omitempty"` // progress of an update it was asked to do
-	Radio       *RadioInfo `json:"radio,omitempty"`       // the far end is a FlexRadio
 	MaxMbps     float64    `json:"maxMbps,omitempty"`     // keep test traffic under this
 	App         string     `json:"app"`
 	Version     string     `json:"version"`
@@ -65,7 +64,6 @@ type Peer struct {
 	OS       string    `json:"os"`
 	Via      string    `json:"via"`             // "LAN" or "Tailscale"
 	DNS      string    `json:"dns,omitempty"`   // MagicDNS name
-	Radio    string    `json:"radio,omitempty"` // FlexRadio model, if it is one
 	LastSeen time.Time `json:"-"`
 }
 
@@ -99,7 +97,6 @@ type App struct {
 	afterUpdate bool   // just restarted by an update: wait for the ports
 	latest      string // newer release seen on GitHub, for the banner
 
-	radio   *RadioInfo // set when running inside a FlexRadio
 	maxMbps float64    // responder side: speed limit testers must respect (0 = none)
 	capMbps float64    // client side, during a test: the far end's limit
 
@@ -221,7 +218,7 @@ func (a *App) helloReply(local net.Addr) HelloReply {
 	r := HelloReply{Magic: magic, ID: a.id, App: appName, Version: appVersion, Host: a.hostName(), OS: runtime.GOOS}
 	a.mu.Lock()
 	r.Busy = a.test.Running
-	r.Radio, r.MaxMbps = a.radio, a.maxMbps
+	r.MaxMbps = a.maxMbps
 	a.mu.Unlock()
 	r.Proto, r.Features, r.UpdateState = protoVersion, myFeatures, a.upd.get()
 	if ta, ok := local.(*net.TCPAddr); ok {
@@ -391,11 +388,9 @@ type announce struct {
 	Host  string `json:"host"`
 	OS    string `json:"os"`
 	Port  int    `json:"port"`
-	Radio string `json:"radio,omitempty"` // model, when this is a FlexRadio
 }
 
-// hostName is the name this copy announces; inside a radio it changes once
-// the radio API answers.
+// hostName is the name this copy announces.
 func (a *App) hostName() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -427,19 +422,11 @@ func (a *App) discoveryLoop() {
 			if an.Port != 0 && an.Port != defDataPort {
 				addr = net.JoinHostPort(ip, fmt.Sprint(an.Port))
 			}
-			a.addPeer(&Peer{ID: an.ID, Addr: addr, IP: ip, Host: an.Host, OS: an.OS, Via: "LAN", Radio: an.Radio})
+			a.addPeer(&Peer{ID: an.ID, Addr: addr, IP: ip, Host: an.Host, OS: an.OS, Via: "LAN"})
 		}
 	}()
 	for {
 		an := announce{Magic: magic, ID: a.id, Host: a.hostName(), OS: runtime.GOOS, Port: a.port}
-		a.mu.Lock()
-		if a.radio != nil {
-			an.Radio = a.radio.Model
-			if an.Radio == "" {
-				an.Radio = "FlexRadio"
-			}
-		}
-		a.mu.Unlock()
 		msg, _ := json.Marshal(an)
 		targets := map[string]bool{"255.255.255.255": true}
 		for _, b := range broadcastAddrs() {

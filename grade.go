@@ -83,7 +83,6 @@ type Result struct {
 	RemoteKind     string `json:"remoteKind"`
 	RemoteLinkMbps int    `json:"remoteLinkMbps"`
 	RemoteDuplex   string `json:"remoteDuplex,omitempty"`
-	RemoteRadio    string `json:"remoteRadio,omitempty"` // FlexRadio model when the far end is a radio
 
 	DownMbps      float64  `json:"downMbps"`
 	UpMbps        float64  `json:"upMbps"`

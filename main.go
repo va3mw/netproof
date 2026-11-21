@@ -44,9 +44,8 @@ func main() {
 	discPort := flag.Int("discovery-port", defDiscPort, "LAN discovery port (UDP)")
 	uiPort := flag.Int("ui-port", defUIPort, "web interface port on 127.0.0.1")
 	second := flag.Bool("second", false, "run a second copy on this computer, for practice")
-	responder := flag.Bool("responder", os.Getenv("NETPROOF_RESPONDER") == "1", "answer tests only: no window (for servers and inside a FlexRadio)")
-	name := flag.String("name", os.Getenv("NETPROOF_NAME"), "name to announce (default: computer name, or the radio's model, nickname and callsign)")
-	radioAddr := flag.String("radio", os.Getenv("SSDR_RADIO_ADDRESS"), "FlexRadio API address to read the radio's name from (set by the radio)")
+	responder := flag.Bool("responder", os.Getenv("NETPROOF_RESPONDER") == "1", "answer tests only: no window (for servers)")
+	name := flag.String("name", os.Getenv("NETPROOF_NAME"), "name to announce (default: computer name)")
 	afterUpdate := flag.Bool("after-update", false, "internal: started by an update")
 	maxMbps := flag.Float64("max-mbps", envFloat("NETPROOF_MAX_MBPS"), "responder: keep test traffic from other computers under this many Mb/s (0 = no limit)")
 	flag.Usage = func() {
@@ -98,9 +97,9 @@ func main() {
 	if flag.NArg() > 0 {
 		os.Exit(a.runCLI(flag.Arg(0)))
 	}
-	// Inside a FlexRadio (the radio sets SSDR_RADIO_ADDRESS) or on a server.
-	if *responder || *radioAddr != "" {
-		os.Exit(a.runResponder(*radioAddr, *name))
+	// On a server: answer tests only.
+	if *responder {
+		os.Exit(a.runResponder())
 	}
 
 	if err := a.startServers(); err != nil {
@@ -161,24 +160,18 @@ func waitForStop() {
 }
 
 // runResponder answers tests from other computers and announces itself on
-// the LAN, with no window. This is what runs inside a FlexRadio.
-func (a *App) runResponder(radioAddr, fixedName string) int {
+// the LAN, with no window.
+func (a *App) runResponder() int {
 	if err := a.startServers(); err != nil {
 		fmt.Fprintln(os.Stderr, "Could not start:", err)
 		return 1
 	}
 	go a.discoveryLoop()
-	if radioAddr != "" {
-		go a.radioLoop(radioAddr, fixedName)
-	}
 	limit := "no speed limit"
 	if a.maxMbps > 0 {
 		limit = "test traffic limited to " + mbps(a.maxMbps)
 	}
 	fmt.Printf("%s %s responder on %s: answering tests on port %d, %s\n", appName, appVersion, a.hostName(), a.port, limit)
-	if radioAddr != "" {
-		fmt.Printf("Running inside a FlexRadio (API at %s); the name updates once the radio API answers\n", radioAddr)
-	}
 	waitForStop()
 	fmt.Println("Stopped.")
 	return 0

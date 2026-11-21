@@ -1,7 +1,7 @@
 # NetProof
 
 A network tester that anyone can run. It measures speed, delay, jitter, packet loss and packet
-size between two computers, or between a computer and a FlexRadio, and says in plain language
+size between two computers, and says in plain language
 whether you would notice a problem and how to fix it. One file, nothing to install.
 
 Built for ham radio operators, whose remote audio, panadapter and SDR streams are UDP and
@@ -12,7 +12,6 @@ suffer from problems an ordinary speed test never shows.
 - [How results are judged](#how-results-are-judged)
 - [Features](#features)
 - [Versions and updates](#versions-and-updates)
-- [Running inside a FlexRadio](#running-inside-a-flexradio)
 - [Command line](#command-line)
 - [Ports and security](#ports-and-security)
 - [Known issues](#known-issues)
@@ -111,8 +110,7 @@ also in the saved and copied text report.
 ## Features
 
 - **Finds other computers by itself**: on the LAN by broadcast, and on Tailscale by asking
-  Tailscale which peers are online and checking which run NetProof. FlexRadios running the
-  NetProof waveform show up with a **Radio** tag.
+  Tailscale which peers are online and checking which run NetProof.
 - **Tested before**: the last 10 computers tested, or that tested this one, with their last
   result and a green dot when NetProof is running there now. Saved in
   `%AppData%\NetProof\recent.json` (Windows) or `~/.config/NetProof/recent.json` (Linux).
@@ -138,8 +136,6 @@ continues. If anything goes wrong (no internet, no write access to its folder, a
 test runs with the version it has, and the report says why the update did not happen.
 
 - Copies older than 1.7.0 cannot update themselves: install the new version there once.
-- A FlexRadio waveform is never updated this way; the report says when a newer one is available
-  for SmartSDR's Waveform Manager.
 - This computer shows a banner with **Update now** when a newer release is out.
 
 **Why this is safe:** a tester cannot send code, only say "update". The other computer installs
@@ -159,17 +155,10 @@ git tag v1.7.0
 git push origin v1.7.0
 ```
 
-The Release workflow tests, builds every platform and the waveform, signs the manifest and
+The Release workflow tests, builds every platform, signs the manifest and
 publishes the release. The repository must be public so copies of NetProof can download it, and
 must have the `NETPROOF_SIGNING_KEY` secret (from `go run ./tools/release keygen`). Keep a backup
 of that key: copies in the field only trust releases signed with it.
-
-## Running inside a FlexRadio
-
-FLEX-8000 series and Aurora radios can run NetProof as a Docker waveform. The radio then answers
-tests by itself and appears on the LAN as, for example, **FLEX-8600 Shack (VA3MW)**, so you
-test the path between your PC and the radio itself. See **[WAVEFORM.md](WAVEFORM.md)** for
-installing, testing and building it.
 
 ## Command line
 
@@ -185,7 +174,7 @@ Runs a test without the browser page and prints the report.
 | `--bind <ip>` | test from this local address (network connection) |
 | `--no-browser` | do not open the browser page |
 | `--second` | a second copy on the same computer, for practice (ports 47810 and 47890) |
-| `--responder` | answer tests only, no page (servers, and inside a FlexRadio) |
+| `--responder` | answer tests only, no page (servers) |
 | `--name <text>` | name to announce instead of the computer name |
 | `--max-mbps <n>` | responder: testers keep their traffic under this many Mb/s |
 
@@ -230,12 +219,6 @@ Builds `dist/netproof.exe` (Windows x64), `dist/netproof-windows-arm64.exe`,
 `tools/mkmacapp` without any Apple tools) plus the separate Mac programs.
 
 ```bash
-./build-waveform.sh
-```
-
-Builds the FlexRadio waveform; see [WAVEFORM.md](WAVEFORM.md).
-
-```bash
 go test ./...
 ```
 
@@ -262,12 +245,10 @@ go-winres simply --arch amd64,arm64 --out rsrc --manifest cli --product-name Net
 | `advice.go` | the "How to fix it" checklists |
 | `iface.go`, `linkinfo_*.go` | network connections, link speed, Wi-Fi and VPN detection (macOS: `networksetup` and `ifconfig`) |
 | `tailscale*.go` | Tailscale peers and MagicDNS names |
-| `radio.go` | reading a FlexRadio's name from its API |
 | `recent.go` | the "Tested before" list |
 | `ui.go`, `web/index.html` | the browser page |
 | `version.go` | versions and feature negotiation between copies |
 | `update*.go` | signed self-update and updating the far end |
-| `tools/mkwaveform` | packs the FlexRadio waveform image |
 | `tools/mkmacapp` | NetProof.app and the universal Mac program |
 | `tools/release` | signing key and signed update manifest |
 | `.github/workflows/release.yml` | builds, signs and publishes a release from a tag |

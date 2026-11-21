@@ -11,8 +11,8 @@ package main
 //   - the release is newer than what is running (no downgrades).
 //
 // So a tester can only ever trigger an update to an official, newer release;
-// it cannot send code. Copies inside a FlexRadio (Docker waveform) never
-// update themselves: SmartSDR's Waveform Manager owns them.
+// it cannot send code. Copies inside a container never update themselves:
+// the container image is updated instead.
 
 import (
 	"context"
@@ -114,12 +114,9 @@ func latestRelease(ctx context.Context) (*releaseManifest, error) {
 	return verifyManifest(body, sig, releasePublicKey)
 }
 
-// inContainer: inside a FlexRadio (or any container), updates are the
-// container manager's job, not ours.
+// inContainer: inside a container, updates are the container manager's
+// job, not ours.
 func inContainer() bool {
-	if os.Getenv("SSDR_RADIO_ADDRESS") != "" {
-		return true
-	}
 	_, err := os.Stat("/.dockerenv")
 	return err == nil
 }
@@ -145,7 +142,7 @@ func (u *updater) get() string {
 // an error straight away when updating is impossible here.
 func (a *App) startUpdate(minVersion, reason string) error {
 	if inContainer() {
-		return errors.New("this copy runs inside a container (FlexRadio waveform); update it with SmartSDR's Waveform Manager")
+		return errors.New("this copy runs inside a container; update the container image instead")
 	}
 	a.mu.Lock()
 	busy := a.test.Running
@@ -239,9 +236,6 @@ func (a *App) reconcileVersions(ctx context.Context, host string, port int, h *H
 		return h, nil
 	case 1:
 		return h, []string{fmt.Sprintf("%s runs a newer NetProof (%s) than this computer (%s). Update this computer to get the newest tests.", h.Host, h.Version, appVersion)}
-	}
-	if h.Radio != nil {
-		return h, []string{fmt.Sprintf("%s runs NetProof waveform %s; %s is available. Reinstall it with SmartSDR's Waveform Manager to get the newest tests.", h.Host, h.Version, appVersion)}
 	}
 	if !peerFeatures(h)["update"] {
 		return h, []string{fmt.Sprintf("%s runs NetProof %s, which cannot update itself. Install %s there once; after that it keeps itself up to date.", h.Host, h.Version, appVersion)}

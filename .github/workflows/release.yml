@@ -42,7 +42,6 @@ jobs:
       - name: Build
         run: |
           ./build.sh
-          ./build-waveform.sh
 
       - name: Sign the update manifest
         env:
@@ -60,5 +59,4 @@ jobs:
             dist/netproof-mac-arm64 dist/netproof-mac-intel \
             dist/NetProof-mac.zip dist/netproof-mac-universal \
             "dist/NetProof second copy.bat" \
-            dist/netproof-waveform-*.tar.gz \
             dist/netproof-update.json dist/netproof-update.json.sig

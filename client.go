@@ -240,12 +240,6 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 		RemoteVersion: h.Version,
 		VersionNotes:  versionNotes,
 	}
-	if h.Radio != nil {
-		r.RemoteRadio = h.Radio.Model
-		if r.RemoteRadio == "" {
-			r.RemoteRadio = "FlexRadio"
-		}
-	}
 	if practice {
 		r.RemoteHost = h.Host + " (itself)"
 		if !self {
