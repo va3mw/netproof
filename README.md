@@ -300,3 +300,7 @@ go-winres simply --arch amd64,arm64 --out rsrc --manifest cli --product-name Net
 | `tools/mkmacapp` | NetProof.app and the universal Mac program |
 | `tools/release` | signing key and signed update manifest |
 | `.github/workflows/release.yml` | builds, signs and publishes a release from a tag |
+
+## License
+
+NetProof is released under the [MIT License](LICENSE). Copyright (c) 2026 Michael, VA3MW.
