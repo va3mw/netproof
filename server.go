@@ -64,6 +64,8 @@ type Peer struct {
 	OS       string    `json:"os"`
 	Via      string    `json:"via"`             // "LAN" or "Tailscale"
 	DNS      string    `json:"dns,omitempty"`   // MagicDNS name
+	Version  string    `json:"version,omitempty"` // NetProof version it runs, once known
+	Update   string    `json:"update,omitempty"`  // see peerUpdateInfo
 	LastSeen time.Time `json:"-"`
 }
 
@@ -97,6 +99,9 @@ type App struct {
 	afterUpdate bool   // just restarted by an update: wait for the ports
 	latest      string // newer release seen on GitHub, for the banner
 
+	pver map[string]peerVer // other copies' versions, by address:port
+	pupd map[string]string  // updates of other copies started from the page
+
 	maxMbps float64    // responder side: speed limit testers must respect (0 = none)
 	capMbps float64    // client side, during a test: the far end's limit
 
@@ -122,6 +127,8 @@ func newApp(listen string, port, discPort int) *App {
 		discPort: discPort,
 		profile:  "auto",
 		peers:    map[string]*Peer{},
+		pver:     map[string]peerVer{},
+		pupd:     map[string]string{},
 		test:     TestState{PhaseLabel: "Ready"},
 	}
 	a.recent.load()
@@ -423,6 +430,7 @@ func (a *App) discoveryLoop() {
 				addr = net.JoinHostPort(ip, fmt.Sprint(an.Port))
 			}
 			a.addPeer(&Peer{ID: an.ID, Addr: addr, IP: ip, Host: an.Host, OS: an.OS, Via: "LAN"})
+			a.refreshPeerVersion(addr)
 		}
 	}()
 	for {
@@ -507,6 +515,7 @@ func (a *App) scanTailscale() {
 			if err != nil {
 				return
 			}
+			a.notePeerVersion(a.verKey(p.IPv4), h)
 			a.addPeer(&Peer{ID: "ts-" + p.IPv4, Addr: p.IPv4, IP: p.IPv4, Host: h.Host, OS: h.OS, Via: "Tailscale", DNS: p.DNSName})
 		}(p)
 	}
@@ -522,6 +531,7 @@ func (a *App) practicePeerLoop() {
 	}
 	for {
 		if h, err := a.hello("127.0.0.1", other, time.Second); err == nil && h.ID != a.id {
+			a.notePeerVersion(a.verKey(fmt.Sprintf("127.0.0.1:%d", other)), h)
 			a.addPeer(&Peer{ID: h.ID, Addr: fmt.Sprintf("127.0.0.1:%d", other), IP: fmt.Sprintf("127.0.0.1:%d", other),
 				Host: h.Host + " (" + copyName(other) + ")", OS: h.OS, Via: "This computer"})
 		}

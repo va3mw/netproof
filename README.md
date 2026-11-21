@@ -176,6 +176,9 @@ test runs with the version it has, and the report says why the update did not ha
 
 - Copies older than 1.7.0 cannot update themselves: install the new version there once.
 - This computer shows a banner with **Update now** when a newer release is out.
+- The computer list shows each other computer's NetProof version. When one runs an older version
+  that can update itself, an **Update to x.y.z** button next to it updates it right away,
+  without running a test.
 
 **Why this is safe:** a tester cannot send code, only say "update". The other computer installs
 nothing unless the release manifest is signed with the NetProof release key (the public half is
