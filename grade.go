@@ -103,6 +103,7 @@ type Result struct {
 	VersionNotes  []string `json:"versionNotes,omitempty"` // updates done or not possible
 	Skipped       []string `json:"skipped,omitempty"`      // tests the far end could not do
 	Samples       []Sample `json:"samples,omitempty"`      // speed over time, for the graph
+	Ham           bool     `json:"ham,omitempty"`          // ham radio software runs at either end: radio wording
 
 	UDPRateMbps float64    `json:"udpRateMbps"`
 	UDPDown     *UDPStats  `json:"udpDown,omitempty"`
@@ -244,12 +245,12 @@ func (r *Result) Grade(profile string) {
 	bloatGrade := grade3(bloat, bf, bp, false)
 	thrGrade := func(v float64) string {
 		if r.RateCapMbps > 0 && v >= r.RateCapMbps*0.8 {
-			return "info" // as fast as the radio allowed: says nothing about the network
+			return "info" // as fast as the far end allowed: says nothing about the network
 		}
 		return grade3(v, p.ThrGood, p.ThrFair, true)
 	}
 	if r.RateCapMbps > 0 {
-		thrExpect = "limited to " + mbps(r.RateCapMbps) + " by the radio"
+		thrExpect = "limited to " + mbps(r.RateCapMbps) + " by the far end"
 	}
 	r.Metrics = []Metric{
 		{Key: "down", Label: "Speed  " + r.RemoteHost + " → " + r.LocalHost, Value: r.DownMbps, Unit: "Mb/s", Grade: thrGrade(r.DownMbps), Expect: thrExpect},
@@ -312,9 +313,9 @@ func (r *Result) Grade(profile string) {
 		case sd.kind == "wired" && sd.link > 0 && sd.link <= 10:
 			add("poor", fmt.Sprintf("Everything to and from %s will feel slow: its network adapter (%s) is connected at only %d Mb/s. That almost always means a broken cable or a damaged port.", sd.host, sd.iface, sd.link))
 		case sd.kind == "wired" && sd.link == 100 && (fastest >= 1000 || p.Key == "1g"):
-			add(capLevel, fmt.Sprintf("Large file copies to and from %s will be about 10 times slower than they should: its network adapter (%s) is connected at 100 Mb/s instead of 1 Gb/s. Radio audio and remote control are not affected. Usually a bad or cheap cable, a wall jack, or an old switch.", sd.host, sd.iface))
+			add(capLevel, fmt.Sprintf(r.say("Large file copies to and from %s will be about 10 times slower than they should: its network adapter (%s) is connected at 100 Mb/s instead of 1 Gb/s. Live audio and remote control are not affected. Usually a bad or cheap cable, a wall jack, or an old switch.", "Large file copies to and from %s will be about 10 times slower than they should: its network adapter (%s) is connected at 100 Mb/s instead of 1 Gb/s. Radio audio and remote control are not affected. Usually a bad or cheap cable, a wall jack, or an old switch."), sd.host, sd.iface))
 		case sd.kind == "wired" && sd.link == 100:
-			add("info", fmt.Sprintf("%s is connected at 100 Mb/s. Plenty for radio and remote control; large file copies are limited to about 11 MB per second.", sd.host))
+			add("info", fmt.Sprintf(r.say("%s is connected at 100 Mb/s. Plenty for live audio and remote control; large file copies are limited to about 11 MB per second.", "%s is connected at 100 Mb/s. Plenty for radio audio, panadapters and remote control; large file copies are limited to about 11 MB per second."), sd.host))
 		}
 		if sd.duplex == "half" && sd.kind == "wired" {
 			add("poor", fmt.Sprintf("Expect slow, unreliable transfers to and from %s: its adapter runs in half duplex, which causes collisions and lost packets. Set the adapter and the switch port to Auto.", sd.host))
@@ -335,9 +336,9 @@ func (r *Result) Grade(profile string) {
 		var s string
 		switch {
 		case p.Key == "vpn" && m.Grade == "poor":
-			s = fmt.Sprintf("Remote audio plus a panadapter or video may not fit: from %s the link only carried %s.", dir, mbps(m.Value))
+			s = fmt.Sprintf(r.say("Live audio plus video or other streams may not fit: from %s the link only carried %s.", "Remote audio plus a panadapter or video may not fit: from %s the link only carried %s."), dir, mbps(m.Value))
 		case p.Key == "vpn":
-			s = fmt.Sprintf("Remote audio will work, but panadapter, video or file transfers may struggle: from %s the link carried %s.", dir, mbps(m.Value))
+			s = fmt.Sprintf(r.say("Live audio will work, but video or file transfers may struggle: from %s the link carried %s.", "Remote audio will work, but panadapters, video or file transfers may struggle: from %s the link carried %s."), dir, mbps(m.Value))
 		case p.ExpectMbps > 0:
 			s = fmt.Sprintf("Copying files from %s takes about %d times longer than it should: it moved %s, where a healthy %s does about %s.", dir, int(p.ExpectMbps/maxf(m.Value, 1)+0.5), mbps(m.Value), p.Name, mbps(p.ExpectMbps))
 		default:
@@ -346,14 +347,14 @@ func (r *Result) Grade(profile string) {
 		add(m.Grade, s)
 	}
 	if g := gradeOf(r.Metrics, "rtt"); g == "fair" || g == "poor" {
-		add(g, fmt.Sprintf("Remote operation will feel laggy: every action takes %s to reach the other end and come back. Above about %d ms people notice it in remote control, and CW and push-to-talk timing suffer.", ms(r.IdleRTT), rttFair))
+		add(g, fmt.Sprintf(r.say("Conversations and remote control will feel laggy: every action takes %s to reach the other end and come back. Above about %d ms people notice it: talking over each other on calls, and slow response in remote control.", "Remote operation will feel laggy: every action takes %s to reach the other end and come back. Above about %d ms people notice it in remote control, and CW and push-to-talk timing suffer."), ms(r.IdleRTT), rttFair))
 	}
 	jit := r.JitterMs
 	if _, sj, ok := r.udpWorst(); ok {
 		jit = maxf(jit, sj)
 	}
 	if g := grade3(jit, jitFair, jitPoor, false); g != "good" {
-		add(g, fmt.Sprintf("Live audio may stutter: the delay keeps changing by about %s. Raising the audio or network buffer in your radio software hides this, at the cost of a little more delay.", ms(jit)))
+		add(g, fmt.Sprintf(r.say("Live audio may stutter: the delay keeps changing by about %s. Raising the jitter or network buffer in your audio or VoIP software hides this, at the cost of a little more delay.", "Live audio may stutter: the delay keeps changing by about %s. Raising the audio or network buffer in your radio software hides this, at the cost of a little more delay."), ms(jit)))
 	}
 	for _, d := range []struct {
 		st       *UDPStats
@@ -367,13 +368,13 @@ func (r *Result) Grade(profile string) {
 			g = "info"
 		}
 		lost := d.st.Sent - d.st.Received
-		what := "You will hear it: expect clicks, dropouts and gaps in the panadapter"
+		what := r.say("You will hear it: expect clicks, dropouts and gaps in live audio", "You will hear it: expect clicks, dropouts and gaps in the audio and the panadapter")
 		if g == "fair" {
 			what = "You may hear it now and then as a click or a short gap in the audio"
 		} else if g == "info" {
 			what = "Too few to hear"
 		}
-		add(g, fmt.Sprintf("%s. %d of %d packets of a steady %s Mb/s stream from %s to %s were lost (%s%%), and real-time audio and SDR data cannot be resent.", what, lost, d.st.Sent, f1(r.UDPRateMbps), d.from, d.to, f2(d.st.LossPct)))
+		add(g, fmt.Sprintf(r.say("%s. %d of %d packets of a steady %s Mb/s stream from %s to %s were lost (%s%%), and real-time audio cannot be resent.", "%s. %d of %d packets of a steady %s Mb/s stream from %s to %s were lost (%s%%), and real-time audio and SDR data cannot be resent."), what, lost, d.st.Sent, f1(r.UDPRateMbps), d.from, d.to, f2(d.st.LossPct)))
 	}
 	if g := gradeOf(r.Metrics, "loss"); g == "fair" || g == "poor" {
 		add(g, fmt.Sprintf("Expect occasional dropouts: %d of %d test packets were lost.", r.Lost, r.Sent))
@@ -393,7 +394,7 @@ func (r *Result) Grade(profile string) {
 		if msg == "" {
 			msg = "UDP packets are blocked between these computers (probably a firewall)."
 		}
-		add("poor", "Ham radio audio, SDR data and most real-time apps use UDP, and it does not get through here. "+msg)
+		add("poor", r.say("Real-time audio, VoIP and most streaming apps use UDP, and it does not get through here. ", "Ham radio audio, SDR data and most real-time apps use UDP, and it does not get through here. ")+msg)
 	}
 	if m := r.MTU; m != nil && m.PathMTU > 0 {
 		switch {
@@ -426,7 +427,7 @@ func (r *Result) Grade(profile string) {
 		add("info", fmt.Sprintf("Not tested: %s, because %s runs NetProof %s, which does not have it. Update it to get the full test.", strings.Join(names, " and "), r.RemoteHost, r.RemoteVersion))
 	}
 	if r.RateCapMbps > 0 {
-		add("info", fmt.Sprintf("%s limits test traffic to %s so a test cannot disturb live operation. Speed here shows only whether the link can carry that much.", r.RemoteHost, mbps(r.RateCapMbps)))
+		add("info", fmt.Sprintf(r.say("%s limits test traffic to %s so a test cannot disturb live traffic. Speed here shows only whether the link can carry that much.", "%s limits test traffic to %s so a test cannot disturb live operation. Speed here shows only whether the link can carry that much."), r.RemoteHost, mbps(r.RateCapMbps)))
 	}
 	if p.Key == "vpn" {
 		add("info", "This test went through a VPN or the internet, so speed depends on both internet connections. What matters most here is delay, jitter and loss.")
@@ -453,7 +454,7 @@ func (r *Result) Grade(profile string) {
 	switch worst {
 	case "good":
 		r.Headline = "No problems you would notice"
-		r.Notes = append([]Finding{{"good", "Radio audio, remote control and file copies should all work smoothly over this connection."}}, r.Notes...)
+		r.Notes = append([]Finding{{"good", r.say("Live audio, calls, remote control and file copies should all work smoothly over this connection.", "Radio audio, panadapters, remote control and file copies should all work smoothly over this connection.")}}, r.Notes...)
 	case "fair":
 		r.Headline = "Works, but you may notice something"
 	default:

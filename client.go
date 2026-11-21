@@ -244,6 +244,7 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 		RateCapMbps:   h.MaxMbps,
 		RemoteVersion: h.Version,
 		VersionNotes:  versionNotes,
+		Ham:           hamStation() || h.Ham,
 	}
 	if practice {
 		r.RemoteHost = h.Host + " (itself)"
@@ -321,7 +322,7 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 	if !feats["udpstream"] {
 		r.Skipped = append(r.Skipped, "udpstream")
 	} else if lat.method != "UDP" {
-		r.UDPNote = "UDP is blocked between these computers, so the UDP stream test could not run. Ham radio audio and SDR streams will not work through this path either."
+		r.UDPNote = r.say("UDP is blocked between these computers, so the UDP stream test could not run. Real-time audio, VoIP and streaming apps that use UDP will not work through this path either.", "UDP is blocked between these computers, so the UDP stream test could not run. Ham radio audio and SDR streams will not work through this path either.")
 	} else {
 		a.setPhase("udpdown", fmt.Sprintf("UDP stream %s → %s at %s Mb/s", h.Host, a.hostName(), f1(r.UDPRateMbps)))
 		if st, err := a.udpStreamDown(ctx, host, port, r.UDPRateMbps); err == nil {

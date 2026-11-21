@@ -79,7 +79,7 @@ func buildFixes(r *Result, p Profile) []Fix {
 	// --- Wi-Fi
 	wifi := wifiSides(r)
 	if p.Key == "wifi" && (bad("down") || bad("up") || bad("loss") || bad("udploss") || bad("jitter") || bad("udpjitter") || bad("bloat")) {
-		add(Fix{"Use a cable, or make the Wi-Fi steadier", wifiSteps(wifi)})
+		add(Fix{"Use a cable, or make the Wi-Fi steadier", wifiSteps(wifi, r.Ham)})
 	}
 
 	// --- jitter and bufferbloat
@@ -90,21 +90,21 @@ func buildFixes(r *Result, p Profile) []Fix {
 	if bad("bloat") && inHouse && len(wifi) > 0 {
 		add(Fix{"Stop the Wi-Fi getting laggy when it is busy", []string{
 			"Both computers are on the same local network, so this delay builds up in the Wi-Fi itself, not on your internet connection: the access point and the Wi-Fi adapters queue packets while the air is busy. Router SQM for the internet line will not change this result.",
-			"A cable for the radio computer removes it completely.",
+			r.say("A cable for the computer that carries the live audio removes it completely.", "A cable for the radio computer removes it completely."),
 			"Otherwise use an access point that manages its Wi-Fi queues: \"Airtime Fairness\" and queue management on the Wi-Fi side (OpenWrt has both built in, as do many recent Wi-Fi 6 and 7 access points), with WMM on.",
-			"Keep big transfers to and from Wi-Fi devices (backups, cloud sync, video streaming) for when you are not operating.",
+			r.say("Keep big transfers to and from Wi-Fi devices (backups, cloud sync, video streaming) for when you are not using live audio.", "Keep big transfers to and from Wi-Fi devices (backups, cloud sync, video streaming) for when you are not operating."),
 		}})
 	} else if bad("bloat") && (lan || inHouse) {
 		add(Fix{"Stop the LAN getting laggy during big copies", []string{
-			"This only happens while the network is completely full, for example during a large file copy or backup between computers. Schedule those for when you are not operating.",
+			r.say("This only happens while the network is completely full, for example during a large file copy or backup between computers. Schedule those for when you are not using live audio.", "This only happens while the network is completely full, for example during a large file copy or backup between computers. Schedule those for when you are not operating."),
 			"In the network adapter's advanced settings on both computers, try turning \"Interrupt Moderation\" off and \"Flow Control\" on, then test again.",
-			"Cheap unmanaged switches queue a lot of traffic. A better switch, or a managed switch with QoS giving your radio traffic priority, keeps it responsive.",
+			r.say("Cheap unmanaged switches queue a lot of traffic. A better switch, or a managed switch with QoS giving your real-time audio traffic priority, keeps it responsive.", "Cheap unmanaged switches queue a lot of traffic. A better switch, or a managed switch with QoS giving your radio traffic priority, keeps it responsive."),
 		}})
 	} else if bad("bloat") {
 		add(Fix{"Stop the connection getting laggy when it is busy (bufferbloat)", []string{
 			"In the router, turn on SQM / Smart Queue Management, \"cake\" or \"fq_codel\" (OpenWrt, pfSense, OPNsense, Ubiquiti and many others have it), and set it to about 90% of your real line speed.",
 			"If the router has no such setting, QoS that limits big downloads and uploads helps; turning it off on a router whose QoS is badly done can also help.",
-			"Schedule backups and large cloud sync for when you are not operating.",
+			r.say("Schedule backups and large cloud sync for when you are not using live audio.", "Schedule backups and large cloud sync for when you are not operating."),
 		}})
 	}
 	if bad("jitter") || bad("udpjitter") {
@@ -120,7 +120,7 @@ func buildFixes(r *Result, p Profile) []Fix {
 		if len(wifi) > 0 {
 			steps = append(steps, "Use a cable instead of Wi-Fi for anything real-time; the Wi-Fi steps above help when you cannot.")
 		}
-		steps = append(steps, "In your radio or audio software, increase the network or audio buffer a little. More buffer means a bit more delay but no dropouts.")
+		steps = append(steps, r.say("In your audio, VoIP or streaming software, increase the network or jitter buffer a little. More buffer means a bit more delay but no dropouts.", "In your radio or audio software, increase the network or audio buffer a little. More buffer means a bit more delay but no dropouts."))
 		if p.Key == "vpn" {
 			steps = append(steps, "Over the internet, jitter often comes from the slowest upload link. Ask your provider about line quality, or test at a quieter time of day to compare.")
 		}
@@ -147,7 +147,7 @@ func buildFixes(r *Result, p Profile) []Fix {
 				"Find the device that lowers the MTU: a VPN or tunnel, a PPPoE internet connection (1492), or a switch/router with a wrong MTU setting.",
 				"On a plain LAN every device should be at 1500. Check router and switch interface settings for a lower value.",
 				"For VPNs, set the tunnel MTU to the measured value and enable MSS clamping on the VPN routers, so applications never send packets that are too big.",
-				"Apps that send large UDP packets (some SDR and video streams) must be set to a packet size below " + fmt.Sprint(m.PathMTU-28) + " bytes, or they will fail on this path.",
+				r.say("Apps that send large UDP packets (some audio and video streams) must be set to a packet size below ", "Apps that send large UDP packets (some SDR and video streams) must be set to a packet size below ") + fmt.Sprint(m.PathMTU-28) + " bytes, or they will fail on this path.",
 			}})
 		}
 	}
@@ -162,8 +162,8 @@ func buildFixes(r *Result, p Profile) []Fix {
 	// --- UDP blocked
 	if r.LatencyMethod != "UDP" || r.UDPNote != "" {
 		add(Fix{"Allow UDP between the computers", []string{
-			"Ham radio audio, SDR data and most real-time apps use UDP, so this has to work.",
-			"On Windows: Windows Security > Firewall & network protection > Allow an app through firewall > tick NetProof for Private and Public (and the same for your radio software).",
+			r.say("Real-time audio, VoIP and most streaming apps use UDP, so this has to work.", "Ham radio audio, SDR data and most real-time apps use UDP, so this has to work."),
+			r.say("On Windows: Windows Security > Firewall & network protection > Allow an app through firewall > tick NetProof for Private and Public (and the same for your audio or VoIP software).", "On Windows: Windows Security > Firewall & network protection > Allow an app through firewall > tick NetProof for Private and Public (and the same for your radio software)."),
 			"On Debian with ufw: sudo ufw allow 47800:47801/udp",
 			"Check the router or VPN firewall rules between the two networks allow UDP, not just TCP.",
 		}})

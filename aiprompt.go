@@ -86,12 +86,18 @@ func (r *Result) speedSummary() string {
 // AIPrompt is a self-contained prompt to paste into an AI assistant.
 func (r *Result) AIPrompt() string {
 	var b strings.Builder
-	b.WriteString(`I tested the network between two of my computers with NetProof, a network tester for ham radio operators. It measures speed both ways, delay, jitter, packet loss, packet size (MTU), delay while the link is busy (bufferbloat) and a steady UDP stream both ways, like remote radio audio, panadapter and SDR data. I want help understanding the results and fixing anything that would affect remote radio operation.
+	// General wording, or ham radio wording when radio software runs at either end.
+	what := r.say("a steady UDP stream both ways, like real-time audio, VoIP calls and other live streams. I want help understanding the results and fixing anything that would affect real-time audio and streaming.",
+		"a steady UDP stream both ways, like remote radio audio, panadapter and SDR data. I use this link for remote ham radio operation, and I want help understanding the results and fixing anything that would affect it.")
+	use := r.say("real-time audio, VoIP calls, streaming and remote control",
+		"remote radio use (audio, panadapter, CAT and remote control)")
+	sw := r.say("which audio, VoIP or streaming software I use", "which radio software I run")
+	b.WriteString(`I tested the network between two of my computers with NetProof, a network tester. It measures speed both ways, delay, jitter, packet loss, packet size (MTU), delay while the link is busy (bufferbloat) and ` + what + `
 
 Please:
-1. Explain in plain language what these results mean for remote radio use (audio, panadapter, CAT and remote control), and what I would actually notice.
+1. Explain in plain language what these results mean for ` + use + `, and what I would actually notice.
 2. Name the most likely causes of any problem, most likely first, and say which numbers point to each.
-3. Before giving detailed fixes, ask me the questions you need answered (for example: router and switch makes and models, Wi-Fi or cable at each end, VPN or Tailscale in use, ISP and line type, what else uses the network, which radio software I run).
+3. Before giving detailed fixes, ask me the questions you need answered (for example: router and switch makes and models, Wi-Fi or cable at each end, VPN or Tailscale in use, ISP and line type, what else uses the network, ` + sw + `).
 4. Then give step-by-step fixes, simplest and cheapest first, and tell me what to re-test with NetProof after each change to confirm it worked.
 
 Base everything on the numbers below; do not assume measurements that are not there. NetProof's own findings and fix list are included at the end of the report, and you may agree or disagree with them.

@@ -7,8 +7,12 @@ how to fix it. One file, nothing to install.
 **[Download the latest release](https://github.com/va3mw/netproof/releases/latest)** ·
 **[Project page](https://va3mw.github.io/netproof/)**
 
-Built for ham radio operators, whose remote audio, panadapter and SDR streams are UDP and
-suffer from problems an ordinary speed test never shows.
+This tool was initially designed for amateur radio operators who use real-time audio, but it
+is also useful for anyone dealing with VoIP performance issues. Real-time audio and VoIP travel
+as steady UDP streams and suffer from problems an ordinary speed test never shows: jitter, loss,
+and delay that builds up while the link is busy. The results speak in those general terms; when
+ham radio software runs on either computer (SmartSDR, WSJT-X, fldigi, N1MM, SDR Console and
+others), they talk about radio audio, panadapters and SDR data instead.
 
 - [Download](#download)
 - [Quick start](#quick-start)
@@ -108,7 +112,7 @@ About 45 seconds in total.
 | Download | 10 s | 4 parallel TCP streams, far end to this end, first second ignored |
 | Upload | 10 s | the same, other direction, measured at the receiving end |
 | Busy delay | during both | 10 probes a second while the link is full (bufferbloat) |
-| UDP stream in | 8 s | a steady stream of 1200 byte UDP packets at a fixed rate, like radio audio, panadapter and IQ data: loss, one-way jitter, out-of-order packets, delivered rate |
+| UDP stream in | 8 s | a steady stream of 1200 byte UDP packets at a fixed rate, like real-time audio, VoIP and other live streams: loss, one-way jitter, out-of-order packets, delivered rate |
 | UDP stream out | 8 s | the same, other direction |
 
 The UDP stream runs at 100 Mb/s on a gigabit LAN, 30 Mb/s on 100 Mb/s or Wi-Fi and 10 Mb/s over
@@ -145,7 +149,7 @@ the slow end named as the problem.
 The "How to fix it" checklists cover adapters stuck at 100 Mb/s, duplex, packet loss on a wired
 LAN (cables, RF pickup, switches), slow LANs, Wi-Fi (adapter power saving, background scans,
 other devices sharing airtime, router channel and DFS settings, mesh backhaul), bufferbloat (LAN and internet advice
-differ), jitter (including raising the radio software's buffer), VPN paths (relays, Tailscale
+differ), jitter (including raising the audio or VoIP software's jitter buffer), VPN paths (relays, Tailscale
 DERP), MTU and fragmentation (tunnel MTU, MSS clamping) and UDP blocked by firewalls. They are
 also in the saved and copied text report.
 
@@ -181,9 +185,9 @@ a prompt to paste into ChatGPT, Claude, Gemini, Copilot or another AI assistant:
 
 The prompt holds the whole text report and a summary of the speed graph (lowest, average and
 highest speed in each phase, and how much it varied). It asks the AI to explain the results for
-remote radio use, name the likely causes, ask about your router, switches, Wi-Fi or cable, VPN
-and radio software before suggesting fixes, and not to assume numbers that are not in the
-report. The report includes computer names and IP addresses; remove them first if you prefer.
+real-time audio, VoIP and streaming (or for remote radio, when ham radio software is running),
+name the likely causes, ask about your router, switches, Wi-Fi or cable, VPN and audio, VoIP or
+radio software before suggesting fixes, and not to assume numbers that are not in the report. The report includes computer names and IP addresses; remove them first if you prefer.
 The computer that was tested has the same button for the results it received.
 
 ## Versions and updates
@@ -234,6 +238,10 @@ of that key: copies in the field only trust releases signed with it.
 
 ## What's new
 
+- **1.7.5**: results, fixes and the Ask an AI prompt use general terms (real-time audio, VoIP,
+  streaming), so they suit anyone with real-time audio or VoIP problems. When ham radio software
+  is running on either computer (Windows and Linux; the far end reports its own), they use radio
+  terms: radio audio, panadapters, SDR data, CW and push-to-talk.
 - **1.7.4**: advice that fits the test. A test that stayed inside the house no longer gets router
   SQM advice for bufferbloat (it never crossed the internet line); Wi-Fi lag gets Wi-Fi advice
   instead. The Wi-Fi checklist names the computer on Wi-Fi and gives only its operating system's
@@ -343,6 +351,7 @@ go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64,arm64 --out rsrc -
 | `version.go` | versions and feature negotiation between copies |
 | `update*.go` | signed self-update and updating the far end |
 | `peerupdate.go` | other computers' versions and the Update button in the list |
+| `hamdetect.go`, `procs_*.go`, `wifiadvice.go` | ham radio software detection (general or radio wording), and Wi-Fi advice per computer |
 | `docs/` | the project page at https://va3mw.github.io/netproof/ |
 | `tools/mkmacapp` | NetProof.app and the universal Mac program |
 | `tools/release` | signing key and signed update manifest |

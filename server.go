@@ -48,6 +48,7 @@ type HelloReply struct {
 	Kind        string     `json:"kind"`
 	LinkMbps    int        `json:"linkMbps"`
 	Duplex      string     `json:"duplex,omitempty"`
+	Ham         bool       `json:"ham,omitempty"` // ham radio software is running there
 }
 
 type UploadReply struct {
@@ -257,6 +258,7 @@ func (a *App) helloReply(local net.Addr) HelloReply {
 	r.MaxMbps = a.maxMbps
 	a.mu.Unlock()
 	r.Proto, r.Features, r.UpdateState = protoVersion, myFeatures, a.upd.get()
+	r.Ham = hamStation()
 	if ta, ok := local.(*net.TCPAddr); ok {
 		if ifc, ok := a.ifaceForIP(ta.IP.String()); ok {
 			r.Iface, r.Kind, r.LinkMbps, r.Duplex = ifc.Name, ifc.Kind, ifc.LinkMbps, ifc.Duplex
