@@ -69,6 +69,7 @@ type Result struct {
 	Version string `json:"version"`
 
 	LocalHost     string `json:"localHost"`
+	LocalOS       string `json:"localOS,omitempty"` // windows, linux, darwin
 	LocalIP       string `json:"localIP"`
 	LocalIface    string `json:"localIface"`
 	LocalKind     string `json:"localKind"`

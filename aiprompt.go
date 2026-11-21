@@ -14,9 +14,21 @@ var speedPhases = []string{"download", "upload", "udpdown", "udpup"}
 
 // speedSamples keeps the throughput samples (what the graph draws), evenly
 // thinned to at most max points so a result stays small on the wire.
+//
+// The first second of each TCP phase is left out, as the measurement does:
+// the upload is counted as it is written to the socket, so its first moments
+// show the send buffers filling (hundreds of Mb/s that never crossed the
+// network), not the link.
 func speedSamples(all []Sample, max int) []Sample {
 	var thr []Sample
+	phaseStart := map[string]float64{}
 	for _, s := range all {
+		if _, ok := phaseStart[s.Phase]; !ok {
+			phaseStart[s.Phase] = s.T
+		}
+		if (s.Phase == "download" || s.Phase == "upload") && s.T-phaseStart[s.Phase] < warmup.Seconds() {
+			continue
+		}
 		for _, p := range speedPhases {
 			if s.Phase == p {
 				thr = append(thr, Sample{T: math.Round(s.T*100) / 100, Mbps: math.Round(s.Mbps*10) / 10, Phase: s.Phase})

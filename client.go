@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -233,6 +234,7 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 		Time:       time.Now().Format("2006-01-02 15:04:05"),
 		Version:    appVersion,
 		LocalHost:  a.hostName(),
+		LocalOS:    runtime.GOOS,
 		RemoteHost: h.Host,
 		RemoteIP:   host,
 		RemoteName: typedName,

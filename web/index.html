@@ -342,7 +342,13 @@ function drawChart(c, samples, noLabels){
   const g = c.getContext("2d"); g.scale(dpr,dpr); g.clearRect(0,0,w,h);
   const cs = getComputedStyle(document.documentElement);
   const line = cs.getPropertyValue("--line"), mute = cs.getPropertyValue("--mute");
-  const thr = samples.filter(s => THR.includes(s.phase)).map(s => ({...s, mbps: s.mbps || 0}));
+  // Leave out the first second of each TCP phase, as the measurement does:
+  // the upload is counted as it is written to the socket, so it starts with
+  // a burst of the send buffers filling, not traffic on the network.
+  const first = {};
+  for (const s of samples) if (!(s.phase in first)) first[s.phase] = s.t;
+  const thr = samples.filter(s => THR.includes(s.phase) && !((s.phase === "download" || s.phase === "upload") && s.t - first[s.phase] < 1))
+    .map(s => ({...s, mbps: s.mbps || 0}));
   // Time axis from the first speed sample to the last (at least 29 s, the
   // TCP part), so all four phases fit.
   const t0 = thr.length ? thr[0].t : 0, T = Math.max(29, thr.length ? thr[thr.length-1].t - t0 : 0);

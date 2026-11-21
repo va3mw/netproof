@@ -77,22 +77,24 @@ func buildFixes(r *Result, p Profile) []Fix {
 	}
 
 	// --- Wi-Fi
-	if p.Key == "wifi" && (bad("down") || bad("up") || bad("loss") || bad("udploss") || bad("jitter") || bad("udpjitter")) {
-		add(Fix{"Use a cable, or make the Wi-Fi steadier", []string{
-			"For the radio or SDR computer, use a network cable: it is the only fix that removes the problem. Wi-Fi takes turns on a shared channel, so delay and loss come and go however good the signal is. If you cannot run a cable, MoCA adapters over existing TV coax come close to a cable; powerline adapters are hit and miss.",
-			"Turn off Wi-Fi power saving on the computer, which makes the adapter doze between packets. On Windows: Control Panel > Power Options > Change plan settings > Change advanced power settings > Wireless Adapter Settings > Power Saving Mode > Maximum Performance, and keep a laptop plugged in. In the adapter's Advanced settings (Device Manager), set \"MIMO Power Save Mode\" to \"No SMPS\" if it is there. On Linux: sudo iw dev <wifi-name> set power_save off.",
-			"Stop the computer looking for other networks while you operate. Windows scans now and then, often about once a minute, and each scan pauses traffic: that shows as regular lag spikes and audio clicks. Close the Wi-Fi network list, and for a computer that stays put, set \"Roaming Aggressiveness\" to \"Lowest\" and, on Intel adapters, \"Global BG Scan Blocking\" to \"Always\" in the adapter's Advanced settings.",
-			"Update the Wi-Fi driver from the adapter maker (Intel, Realtek, MediaTek, Qualcomm), not only Windows Update. Many lag-spike problems are driver bugs.",
-			"Find out what else is on the Wi-Fi. Every device on the same channel takes turns with yours, so a TV streaming, a cloud backup, phones uploading photos or one old slow device makes everyone wait. Move busy devices to a cable or to the other band.",
-			"Give the 5 GHz (or 6 GHz) band its own network name and connect the radio computer only to that, so it cannot hop between bands or mesh units in the middle of a session.",
-			"In the router or access point: make sure WMM is on (Wi-Fi traffic priority needs it), choose a fixed channel instead of Auto, avoid DFS channels (52 to 144 on 5 GHz: when the router detects radar it must stop and move, which drops everyone for a minute or more), and use 80 MHz channel width rather than 160 MHz.",
-			"With a mesh system, connect the mesh units to each other with cables (wired backhaul). Every hop over the air adds delay and jitter and cuts the speed.",
-			"Moving closer to the access point only helps when the signal is weak (one or two bars, or worse than -67 dBm). With a good signal it changes nothing, and the steps above matter more.",
-		}})
+	wifi := wifiSides(r)
+	if p.Key == "wifi" && (bad("down") || bad("up") || bad("loss") || bad("udploss") || bad("jitter") || bad("udpjitter") || bad("bloat")) {
+		add(Fix{"Use a cable, or make the Wi-Fi steadier", wifiSteps(wifi)})
 	}
 
 	// --- jitter and bufferbloat
-	if bad("bloat") && lan {
+	// A test between two computers on the same subnet never touched the
+	// internet line, so router SQM (which shapes the internet link) cannot
+	// help it: the queue is in the LAN or, with Wi-Fi, in the air.
+	inHouse := r.Route == "local" && !isTailscaleIP(parseIP(r.RemoteIP)) && r.LocalKind != "vpn"
+	if bad("bloat") && inHouse && len(wifi) > 0 {
+		add(Fix{"Stop the Wi-Fi getting laggy when it is busy", []string{
+			"Both computers are on the same local network, so this delay builds up in the Wi-Fi itself, not on your internet connection: the access point and the Wi-Fi adapters queue packets while the air is busy. Router SQM for the internet line will not change this result.",
+			"A cable for the radio computer removes it completely.",
+			"Otherwise use an access point that manages its Wi-Fi queues: \"Airtime Fairness\" and queue management on the Wi-Fi side (OpenWrt has both built in, as do many recent Wi-Fi 6 and 7 access points), with WMM on.",
+			"Keep big transfers to and from Wi-Fi devices (backups, cloud sync, video streaming) for when you are not operating.",
+		}})
+	} else if bad("bloat") && (lan || inHouse) {
 		add(Fix{"Stop the LAN getting laggy during big copies", []string{
 			"This only happens while the network is completely full, for example during a large file copy or backup between computers. Schedule those for when you are not operating.",
 			"In the network adapter's advanced settings on both computers, try turning \"Interrupt Moderation\" off and \"Flow Control\" on, then test again.",
@@ -106,11 +108,19 @@ func buildFixes(r *Result, p Profile) []Fix {
 		}})
 	}
 	if bad("jitter") || bad("udpjitter") {
-		steps := []string{
-			"Fix any packet loss and bufferbloat first; they are the usual cause of jitter.",
-			"Use a cable instead of Wi-Fi for anything real-time.",
-			"In your radio or audio software, increase the network or audio buffer a little. More buffer means a bit more delay but no dropouts.",
+		var steps []string
+		switch lossy, bloat := bad("loss") || bad("udploss"), bad("bloat"); {
+		case lossy && bloat:
+			steps = append(steps, "Fix the packet loss and the lag when busy first (above); they are the usual cause of jitter.")
+		case lossy:
+			steps = append(steps, "Fix the packet loss first (above); it is a usual cause of jitter.")
+		case bloat:
+			steps = append(steps, "Fix the lag when busy first (above); queues filling up are a usual cause of jitter.")
 		}
+		if len(wifi) > 0 {
+			steps = append(steps, "Use a cable instead of Wi-Fi for anything real-time; the Wi-Fi steps above help when you cannot.")
+		}
+		steps = append(steps, "In your radio or audio software, increase the network or audio buffer a little. More buffer means a bit more delay but no dropouts.")
 		if p.Key == "vpn" {
 			steps = append(steps, "Over the internet, jitter often comes from the slowest upload link. Ask your provider about line quality, or test at a quieter time of day to compare.")
 		}
