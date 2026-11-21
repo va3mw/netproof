@@ -234,6 +234,11 @@ of that key: copies in the field only trust releases signed with it.
 
 ## What's new
 
+- **1.7.4**: advice that fits the test. A test that stayed inside the house no longer gets router
+  SQM advice for bufferbloat (it never crossed the internet line); Wi-Fi lag gets Wi-Fi advice
+  instead. The Wi-Fi checklist names the computer on Wi-Fi and gives only its operating system's
+  steps, with its real adapter name. Jitter advice only mentions loss or lag when they were
+  measured. The speed graph no longer starts the upload with a false burst.
 - **1.7.3**: the speed graph stays with the results (both screens), and the graph now spans all
   four speed phases. **Ask an AI** opens a ready-made prompt to paste into an AI assistant.
 - **1.7.2**: an **Update** button next to each older computer in the list, with its version shown.
