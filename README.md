@@ -1,12 +1,15 @@
 # NetProof
 
 A network tester that anyone can run. It measures speed, delay, jitter, packet loss and packet
-size between two computers, and says in plain language
-whether you would notice a problem and how to fix it. One file, nothing to install.
+size between two computers, and says in plain language whether you would notice a problem and
+how to fix it. One file, nothing to install.
+
+**[Download the latest release](https://github.com/va3mw/netproof/releases/latest)**
 
 Built for ham radio operators, whose remote audio, panadapter and SDR streams are UDP and
 suffer from problems an ordinary speed test never shows.
 
+- [Download](#download)
 - [Quick start](#quick-start)
 - [What it measures](#what-it-measures)
 - [How results are judged](#how-results-are-judged)
@@ -17,6 +20,29 @@ suffer from problems an ordinary speed test never shows.
 - [Known issues](#known-issues)
 - [Building](#building)
 - [Project layout](#project-layout)
+
+## Download
+
+Get the file for each computer from
+**[Releases](https://github.com/va3mw/netproof/releases/latest)**:
+
+| Computer | File |
+|---|---|
+| Windows (most PCs) | `netproof.exe` |
+| Windows on ARM | `netproof-windows-arm64.exe` |
+| Mac (Apple Silicon or Intel) | `NetProof-mac.zip` |
+| Debian, Ubuntu or other Linux PC | `netproof-linux-amd64` |
+| Raspberry Pi (64-bit OS) or other ARM Linux | `netproof-linux-arm64` |
+
+On Linux you can download it straight from the terminal:
+
+```bash
+wget https://github.com/va3mw/netproof/releases/latest/download/netproof-linux-amd64
+```
+
+Use `netproof-linux-arm64` in that link on a Raspberry Pi. The Linux files are static programs
+and run on any Debian release with nothing else installed. Once a copy is running, it keeps
+itself up to date (see [Versions and updates](#versions-and-updates)).
 
 ## Quick start
 
@@ -45,8 +71,18 @@ page. The first time, macOS refuses to open it because it is not signed by Apple
 confirm. Then allow NetProof to **find devices on local networks** and to **accept incoming
 connections** when asked. The zip includes these steps as a text file.
 
-**Debian:** `chmod +x netproof-linux-amd64` once. Without a desktop it just prints its addresses
-and answers tests. If `ufw` is on:
+**Debian:** make it runnable once, then start it:
+
+```bash
+chmod +x netproof-linux-amd64
+```
+
+```bash
+./netproof-linux-amd64
+```
+
+Without a desktop it just prints its addresses and answers tests. To answer tests only, with no
+browser page (for example on a server), add `--responder`. If `ufw` is on:
 
 ```bash
 sudo ufw allow 47800:47801/tcp
@@ -113,7 +149,8 @@ also in the saved and copied text report.
   Tailscale which peers are online and checking which run NetProof.
 - **Tested before**: the last 10 computers tested, or that tested this one, with their last
   result and a green dot when NetProof is running there now. Saved in
-  `%AppData%\NetProof\recent.json` (Windows) or `~/.config/NetProof/recent.json` (Linux).
+  `%AppData%\NetProof\recent.json` (Windows), `~/.config/NetProof/recent.json` (Linux) or
+  `~/Library/Application Support/NetProof/recent.json` (Mac).
 - **Pick the network connection** when a computer has several (Ethernet, Wi-Fi, Tailscale,
   other VPNs).
 - **Names and Tailscale MagicDNS**: type `boathouse2` or `boathouse2.tail1234.ts.net`. The name is
