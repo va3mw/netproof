@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"os"
@@ -15,6 +16,9 @@ import (
 
 //go:embed web/index.html
 var indexHTML []byte
+
+//go:embed web/ai-prompt.html
+var aiPromptPage string
 
 var httpClient = http.Client{Timeout: 2 * time.Second}
 
@@ -186,6 +190,20 @@ func (a *App) startUI(port int) (string, error) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Content-Disposition", "attachment; filename=\"netproof-"+strings.NewReplacer(" ", "_", ":", "").Replace(res.Time)+".txt\"")
 		fmt.Fprint(w, res.Text())
+	})
+	mux.HandleFunc("/ai-prompt", func(w http.ResponseWriter, r *http.Request) {
+		a.mu.Lock()
+		res := a.lastRes
+		if r.URL.Query().Get("which") == "incoming" && a.incoming != nil {
+			res = a.incoming.Result
+		}
+		a.mu.Unlock()
+		if res == nil {
+			http.Error(w, "no results yet", 404)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, strings.Replace(aiPromptPage, "{{PROMPT}}", html.EscapeString(res.AIPrompt()), 1))
 	})
 
 	srv := &http.Server{Handler: guardLocal(mux), ReadHeaderTimeout: 5 * time.Second}

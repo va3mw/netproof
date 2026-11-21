@@ -57,6 +57,8 @@ button.x{background:transparent;color:var(--mute);border:1px solid var(--line);p
 .phases span.on{background:var(--accent);color:var(--accent-ink)}
 .phases span.ok{color:var(--good)}
 canvas{width:100%;height:170px;display:block;margin-top:10px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--mute);margin-top:6px}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:3px}
 .verdict{border-radius:12px;padding:20px;margin-bottom:14px}
 .verdict h3{margin:0 0 4px;font-size:24px;letter-spacing:-.02em}
 .verdict.good{background:var(--good-bg)} .verdict.good h3{color:var(--good)}
@@ -155,11 +157,17 @@ details summary{cursor:pointer;font-weight:600}
         </div>
       </div>
       <div class="metrics" id="metrics"></div>
+      <div id="resChartBox" class="hide">
+        <h3 style="margin:16px 0 0">Speed during the test</h3>
+        <canvas id="resChart"></canvas>
+        <div class="legend" id="resLegend"></div>
+      </div>
       <div class="meta" id="meta"></div>
       <div id="fixes"></div>
       <div class="row" style="margin-top:14px;gap:8px;flex-wrap:wrap">
         <button class="ghost" id="copy">Copy report</button>
         <a id="save" href="/api/report.txt"><button class="ghost">Save report</button></a>
+        <button class="ghost" id="askAI" title="Opens a window with a ready-made prompt to paste into ChatGPT, Claude or another AI assistant">Ask an AI</button>
         <button class="ghost" id="again">Test again</button>
       </div>
     </section>
@@ -322,20 +330,24 @@ function renderRun(){
   else $("live").innerHTML = `<small>${esc(t.phaseLabel || "")}&hellip;</small>`;
   $("cancel").classList.toggle("hide", !t.running);
   if (t.error){ $("runErr").textContent = t.error; $("runErr").classList.remove("hide"); }
-  drawChart(t.samples || []);
+  drawChart($("chart"), t.samples || []);
 }
 
-function drawChart(samples){
-  const c = $("chart"), dpr = window.devicePixelRatio || 1;
+// noLabels: the results graph has its own legend below it.
+function drawChart(c, samples, noLabels){
+  const dpr = window.devicePixelRatio || 1;
   const w = c.clientWidth, h = c.clientHeight;
   if (!w) return;
   c.width = w*dpr; c.height = h*dpr;
   const g = c.getContext("2d"); g.scale(dpr,dpr); g.clearRect(0,0,w,h);
   const cs = getComputedStyle(document.documentElement);
   const line = cs.getPropertyValue("--line"), mute = cs.getPropertyValue("--mute");
-  const thr = samples.filter(s => THR.includes(s.phase));
-  const T = 29, maxM = Math.max(10, ...thr.map(s => s.mbps)) * 1.15;
-  const x = t => 40 + (w-50) * Math.min(t,T)/T, y = v => h-14 - (h-34) * v/maxM;
+  const thr = samples.filter(s => THR.includes(s.phase)).map(s => ({...s, mbps: s.mbps || 0}));
+  // Time axis from the first speed sample to the last (at least 29 s, the
+  // TCP part), so all four phases fit.
+  const t0 = thr.length ? thr[0].t : 0, T = Math.max(29, thr.length ? thr[thr.length-1].t - t0 : 0);
+  const maxM = Math.max(10, ...thr.map(s => s.mbps)) * 1.15;
+  const x = t => 40 + (w-50) * Math.min(t-t0,T)/T, y = v => h-14 - (h-34) * v/maxM;
   g.strokeStyle = line; g.fillStyle = mute; g.font = "11px system-ui"; g.lineWidth = 1;
   for (let i=0;i<=4;i++){ const v = maxM*i/4; g.beginPath(); g.moveTo(40,y(v)); g.lineTo(w-10,y(v)); g.stroke(); g.fillText(v>=100?Math.round(v):v.toFixed(0), 4, y(v)+4); }
   g.fillText("Mb/s", 4, 9);
@@ -344,7 +356,7 @@ function drawChart(samples){
     if (!pts.length) continue;
     g.strokeStyle = cs.getPropertyValue({download:"--chart",upload:"--chart2"}[ph] || "--chart3"); g.lineWidth = 2; g.beginPath();
     pts.forEach((s,i) => i ? g.lineTo(x(s.t),y(s.mbps)) : g.moveTo(x(s.t),y(s.mbps))); g.stroke();
-    g.fillStyle = g.strokeStyle; g.fillText({download:"download",upload:"upload",udpdown:"UDP in",udpup:"UDP out"}[ph], x(pts[0].t)+4, 12);
+    if (!noLabels){ g.fillStyle = g.strokeStyle; g.fillText({download:"download",upload:"upload",udpdown:"UDP in",udpup:"UDP out"}[ph], x(pts[0].t)+4, 12); }
   }
 }
 
@@ -391,6 +403,23 @@ function renderResult(res, isIncoming){
   if (document.activeElement !== sel) sel.value = want;
   $("save").href = "/api/report.txt" + (isIncoming ? "?which=incoming" : "");
   $("copy").dataset.which = isIncoming ? "incoming" : "";
+  $("askAI").dataset.which = isIncoming ? "incoming" : "";
+  shownRes = res;
+  drawResChart();
+}
+
+// The speed graph kept with the result shown (results from 1.7.3 on).
+let shownRes = null;
+function drawResChart(){
+  const res = shownRes;
+  const has = !!(res && res.samples && res.samples.length);
+  $("resChartBox").classList.toggle("hide", !has);
+  if (!has) return;
+  drawChart($("resChart"), res.samples, true);
+  const a = esc(res.remoteHost), b = esc(res.localHost);
+  const items = [["--chart", `TCP ${a} → ${b}`], ["--chart2", `TCP ${b} → ${a}`], ["--chart3", `UDP stream, both ways (steady ${res.udpRateMbps} Mb/s)`]];
+  const html = items.map(i => `<span><i style="background:var(${i[0]})"></i>${i[1]}</span>`).join("");
+  if ($("resLegend").innerHTML !== html) $("resLegend").innerHTML = html;
 }
 
 function udpLine(st, dir, rate){
@@ -453,7 +482,8 @@ $("copy").onclick = async () => {
   catch { const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); $("copy").textContent = "Copied"; }
   setTimeout(() => $("copy").textContent = "Copy report", 1500);
 };
-window.addEventListener("resize", () => S && drawChart(S.test.samples || []));
+$("askAI").onclick = () => window.open("/ai-prompt" + ($("askAI").dataset.which ? "?which=incoming" : ""), "netproof-ai", "width=900,height=820");
+window.addEventListener("resize", () => { if (S) drawChart($("chart"), S.test.samples || []); drawResChart(); });
 poll(); setInterval(poll, 500);
 </script>
 </body>

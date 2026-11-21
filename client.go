@@ -340,6 +340,9 @@ func (a *App) doTest(ctx context.Context, target string) (*Result, error) {
 	}
 
 	r.Grade(prof)
+	a.mu.Lock()
+	r.Samples = speedSamples(a.test.Samples, 600)
+	a.mu.Unlock()
 
 	// Tell the far end so its screen shows the same results.
 	if self {

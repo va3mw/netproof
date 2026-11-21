@@ -160,6 +160,11 @@ also in the saved and copied text report.
   does not know it, NetProof asks Tailscale directly.
 - **Both screens show the result**: the computer that was tested shows the same report.
 - **Copy or save the report** as plain text, for email or a support ticket.
+- **Speed graph with the results**: speed in each direction and the UDP streams over the whole
+  test, so dips and drop-outs stay visible after the test ends.
+- **Ask an AI**: opens a window with a ready-made prompt holding the whole report, to paste into
+  ChatGPT, Claude, Gemini or Copilot. It asks the AI to explain the results, ask about your setup
+  and suggest fixes to try and re-test.
 
 ## Versions and updates
 

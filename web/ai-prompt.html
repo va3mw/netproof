@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetProof: ask an AI</title>
+<style>
+:root{
+  --bg:#f4f5f7; --card:#fff; --ink:#1b1f24; --mute:#626b76; --line:#dde1e6;
+  --accent:#2563eb; --accent-ink:#fff; --good:#15803d;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#111418; --card:#1a1e24; --ink:#e8eaed; --mute:#9aa3ad; --line:#2c323a; --accent:#3b82f6; --good:#4ade80; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:20px 16px 40px;display:flex;flex-direction:column;gap:12px;min-height:100vh}
+h1{font-size:22px;margin:0;letter-spacing:-.02em}
+h1 span{color:var(--accent)}
+p{margin:0;color:var(--mute)}
+ol{margin:0;padding-left:20px;color:var(--mute)}
+textarea{flex:1;min-height:320px;width:100%;font:13px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;resize:vertical}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button{font:inherit;font-weight:600;border:0;border-radius:8px;padding:10px 18px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+.ok{color:var(--good);font-weight:600}
+</style>
+</head>
+<body>
+<main>
+  <h1>Net<span>Proof</span>: ask an AI</h1>
+  <p>This prompt holds your full NetProof report and asks for plain-language help. To use it:</p>
+  <ol>
+    <li>Click <b>Copy prompt</b>.</li>
+    <li>Open ChatGPT, Claude, Gemini, Copilot or another AI assistant, paste it into a new chat and send it.</li>
+    <li>Answer its questions about your setup; it then suggests fixes to try and re-test with NetProof.</li>
+  </ol>
+  <p>The report includes computer names and IP addresses; remove them first if you prefer.</p>
+  <div class="row"><button id="copy">Copy prompt</button><span id="done" class="ok" hidden>Copied</span></div>
+  <textarea id="prompt" spellcheck="false">{{PROMPT}}</textarea>
+</main>
+<script>
+const t = document.getElementById("prompt");
+const done = document.getElementById("done");
+function copied(msg){ done.textContent = msg; done.hidden = false; setTimeout(() => done.hidden = true, 4000); }
+document.getElementById("copy").onclick = () => {
+  // Selecting and copying works in every browser and never waits for a
+  // permission prompt; the clipboard API is only the fallback.
+  t.focus(); t.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) {}
+  if (ok) return copied("Copied");
+  navigator.clipboard.writeText(t.value).then(() => copied("Copied"),
+    () => copied("Press Ctrl+C (or Cmd+C on a Mac) to copy the selected text"));
+};
+</script>
+</body>
+</html>

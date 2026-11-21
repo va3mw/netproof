@@ -101,6 +101,7 @@ type Result struct {
 	RemoteVersion string   `json:"remoteVersion,omitempty"`
 	VersionNotes  []string `json:"versionNotes,omitempty"` // updates done or not possible
 	Skipped       []string `json:"skipped,omitempty"`      // tests the far end could not do
+	Samples       []Sample `json:"samples,omitempty"`      // speed over time, for the graph
 
 	UDPRateMbps float64    `json:"udpRateMbps"`
 	UDPDown     *UDPStats  `json:"udpDown,omitempty"`
