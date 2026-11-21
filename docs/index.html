@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NetProof</title>
-<meta name="description" content="NetProof: a network tester for ham radio operators. Speed, delay, jitter, packet loss and packet size between two computers, in plain language. Windows, Mac, Debian and Raspberry Pi.">
+<meta name="description" content="NetProof: a network tester for real-time audio and VoIP. Speed, delay, jitter, packet loss and packet size between two computers, in plain language. Windows, Mac, Debian and Raspberry Pi.">
 <style>
 :root {
   --aub: #3f0e40; --aub-2: #350d36; --aub-3: #522653; --aub-ink: #fff; --aub-muted: #cfc3cf;
@@ -79,14 +79,15 @@ footer { margin-top: 48px; padding: 24px 0 40px; border-top: 1px solid var(--lin
 <header class="hero">
   <div class="wrap">
     <h1>NetProof</h1>
-    <p class="lead">Is your network good enough for remote radio? NetProof tests the link between two computers, or between your shack and a remote site, and tells you in plain language whether you would hear or feel a problem, and how to fix it.</p>
+    <p class="lead">Is your network good enough for real-time audio and VoIP? NetProof tests the link between two computers, on your LAN or to a remote site, and tells you in plain language whether you would hear or feel a problem, and how to fix it.</p>
     <div class="btns">
       <a class="btn go" href="https://github.com/va3mw/netproof/releases/latest/download/netproof.exe">Download for Windows</a>
       <a class="btn ghost" href="#download">Mac, Debian and Raspberry Pi</a>
       <a class="btn ghost" href="https://github.com/va3mw/netproof">Source on GitHub</a>
     </div>
     <p class="small"><b style="color:var(--aub-ink)">One file, nothing to install:</b> run it on both computers, click Test on one, and wait about 45 seconds.</p>
-    <p class="small"><b style="color:var(--aub-ink)">Built for radio:</b> remote audio, panadapter and SDR data are steady UDP streams, and they suffer from problems an ordinary speed test never shows.</p>
+    <p class="small"><b style="color:var(--aub-ink)">Built for real-time audio:</b> live audio and VoIP calls are steady UDP streams, and they suffer from problems an ordinary speed test never shows: jitter, loss, and delay that builds up while the link is busy.</p>
+    <p class="small">First designed for amateur radio operators who use real-time audio, and just as useful for anyone dealing with VoIP performance issues.</p>
     <p class="small">Free and open source under the MIT License. Not a FlexRadio product. Windows 10/11, macOS 11 or newer, Debian, Ubuntu and Raspberry Pi OS (64-bit).</p>
   </div>
 </header>
@@ -107,11 +108,11 @@ footer { margin-top: 48px; padding: 24px 0 40px; border-top: 1px solid var(--lin
 
 <section id="features">
   <h2>What it does</h2>
-  <p>Run NetProof on both ends of the link you care about: the shack PC and the operating laptop, the radio PC and the remote site over a VPN, or two computers on your LAN. Either one presses Test; the other answers by itself. There is no client or server to choose.</p>
+  <p>Run NetProof on both ends of the link you care about: the desk PC and a laptop, an office PC and a remote site over a VPN, or two computers on your LAN. Either one presses Test; the other answers by itself. There is no client or server to choose.</p>
   <div class="cards">
     <div class="card"><h3>Plain-language verdict</h3><p>Results are grouped as <b>You will notice</b>, <b>You may notice</b> and <b>Good to know</b>, each saying what you would hear or feel first and the numbers second.</p></div>
     <div class="card"><h3>How to fix it</h3><p>Every problem you would notice comes with a checklist: cables, switches, duplex, Wi-Fi, bufferbloat, VPN relays, MTU and firewalls.</p></div>
-    <div class="card"><h3>Tests like radio traffic</h3><p>A steady UDP stream both ways, like remote audio and IQ data, shows loss, jitter and out-of-order packets that TCP speed tests hide.</p></div>
+    <div class="card"><h3>Tests like live audio</h3><p>A steady UDP stream both ways, like real-time audio and VoIP calls, shows loss, jitter and out-of-order packets that TCP speed tests hide.</p></div>
     <div class="card"><h3>Finds the other computer</h3><p>On the LAN by broadcast, and on Tailscale by asking Tailscale which peers run NetProof. Names and MagicDNS names work too.</p></div>
     <div class="card"><h3>Speed graph</h3><p>Speed in each direction and the UDP streams over the whole test, kept with the results so dips and drop-outs stay visible.</p></div>
     <div class="card"><h3>Both screens show the result</h3><p>The computer that was tested shows the same report, so the person at the far end sees it too.</p></div>
@@ -134,14 +135,14 @@ footer { margin-top: 48px; padding: 24px 0 40px; border-top: 1px solid var(--lin
     <tr><td>Download</td><td>10 s</td><td>4 parallel TCP streams, far end to this end</td></tr>
     <tr><td>Upload</td><td>10 s</td><td>The same, the other way, measured at the receiving end</td></tr>
     <tr><td>Busy delay</td><td>during both</td><td>10 probes a second while the link is full (bufferbloat)</td></tr>
-    <tr><td>UDP stream in and out</td><td>8 s each</td><td>A steady stream of 1200-byte UDP packets at a fixed rate, like radio audio, panadapter and IQ data: loss, one-way jitter, out-of-order packets, delivered rate</td></tr>
+    <tr><td>UDP stream in and out</td><td>8 s each</td><td>A steady stream of 1200-byte UDP packets at a fixed rate, like real-time audio, VoIP and other live streams: loss, one-way jitter, out-of-order packets, delivered rate</td></tr>
   </table></div>
   <p>The UDP stream runs at 100 Mb/s on a gigabit LAN, 30 Mb/s on 100 Mb/s or Wi-Fi and 10 Mb/s over a VPN, and never above 70% of the TCP speed just measured, so a slow link is tested for loss rather than simply overrun.</p>
 </section>
 
 <section id="judged">
   <h2>How results are judged</h2>
-  <p>NetProof only calls something out when a person would actually hear or feel it: clicks and dropouts in audio, laggy remote control, CW and push-to-talk timing, slow file copies.</p>
+  <p>NetProof only calls something out when a person would actually hear or feel it: clicks and dropouts in audio, people talking over each other on calls, laggy remote control, slow file copies.</p>
   <div class="scroll"><table>
     <tr><th></th><th>Healthy 100 Mb/s LAN</th><th>Healthy 1 Gb/s LAN</th><th>Healthy VPN</th><th>You may notice</th><th>You will notice</th></tr>
     <tr><td>Speed each way</td><td>90 to 95 Mb/s</td><td>900 to 945 Mb/s</td><td>depends on both internet links</td><td>below 80 / 700 / 10 Mb/s</td><td>below 40 / 300 / 3 Mb/s</td></tr>
@@ -211,7 +212,7 @@ sudo ufw allow 47800:47801/udp</code></pre>
 <section id="ai">
   <h2>Ask an AI</h2>
   <p>Below the results, <b>Ask an AI</b> opens a window with a prompt that holds the whole report and a summary of the speed graph. Click <b>Copy prompt</b>, paste it into a new chat in ChatGPT, Claude, Gemini, Copilot or another assistant, and send it.</p>
-  <p>The prompt asks the AI to explain the results for remote radio use, name the likely causes, ask about your setup (router and switch models, Wi-Fi or cable at each end, VPN, ISP, radio software) before suggesting fixes, and say what to re-test with NetProof after each change. The report includes computer names and IP addresses; remove them first if you prefer.</p>
+  <p>The prompt asks the AI to explain the results for real-time audio, VoIP and streaming, name the likely causes, ask about your setup (router and switch models, Wi-Fi or cable at each end, VPN, ISP, the audio or VoIP software you use) before suggesting fixes, and say what to re-test with NetProof after each change. The report includes computer names and IP addresses; remove them first if you prefer.</p>
 </section>
 
 <section id="faq">
@@ -228,7 +229,9 @@ sudo ufw allow 47800:47801/udp</code></pre>
   <h3>Windows Defender flagged it</h3>
   <p>New, unsigned programs are sometimes flagged by Windows Defender's machine-learning check (for example as <code>Trojan:Win32/Bearfoos.A!ml</code>). It is a false positive. Until NetProof is code-signed: Windows Security → Virus &amp; threat protection → Protection history → the NetProof entry → Actions → <b>Allow on device</b>.</p>
   <h3>My Wi-Fi results are poor, but the signal is full</h3>
-  <p>That is normal: Wi-Fi delay and loss come mostly from sharing airtime, power saving and background scans, not from distance. The "How to fix it" checklist covers what helps; a network cable is the only complete fix for the radio computer.</p>
+  <p>That is normal: Wi-Fi delay and loss come mostly from sharing airtime, power saving and background scans, not from distance. The "How to fix it" checklist covers what helps; a network cable is the only complete fix for the computer that carries the live audio.</p>
+  <h3>I use it for ham radio. Why do the results not mention radio?</h3>
+  <p>They do when NetProof can tell. If ham radio software is running on either computer (SmartSDR, DAX, WSJT-X, fldigi, N1MM, SDR Console, Hamlib and others), the results, fixes and Ask an AI prompt talk about radio audio, panadapters, SDR data, CW and push-to-talk. Otherwise they use general terms. NetProof only reads the list of running programs on Windows and Linux; it never starts anything, and the far end reports its own.</p>
   <h3>Does it send anything over the internet?</h3>
   <p>Only to check GitHub for a newer release, and to download it when you or a tester asks for an update. Test traffic stays between the two computers. Nothing is collected.</p>
 </section>
