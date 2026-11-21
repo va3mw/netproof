@@ -35,7 +35,7 @@ import (
 
 // releasePublicKey verifies release manifests. Made with
 // "go run ./tools/release keygen".
-const releasePublicKey = "ZCnRkBrLPlIdWx9jfuB5ZX11BsHEXRnp3GvbaSkNZ0M="
+const releasePublicKey = "bhQQVF7xh7JxjVjCH+Enkkx4VCH1AnCvcjIgoFYxfeM="
 
 // Where releases are published. The repository must be public for copies of
 // NetProof to reach these without a login.
