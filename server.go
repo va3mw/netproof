@@ -110,6 +110,27 @@ type App struct {
 	ifCache   []IfaceInfo
 	ifCacheAt time.Time
 	disc      *net.UDPConn
+
+	closers []io.Closer // listening sockets, closed by releasePorts
+}
+
+// keepOpen registers a listening socket so releasePorts can close it.
+func (a *App) keepOpen(c io.Closer) {
+	a.mu.Lock()
+	a.closers = append(a.closers, c)
+	a.mu.Unlock()
+}
+
+// releasePorts closes every listening socket, so an updated copy started in
+// the same window can take the ports over while this one waits for it.
+func (a *App) releasePorts() {
+	a.mu.Lock()
+	cs := a.closers
+	a.closers = nil
+	a.mu.Unlock()
+	for _, c := range cs {
+		_ = c.Close()
+	}
 }
 
 func newApp(listen string, port, discPort int) *App {
@@ -156,6 +177,8 @@ func (a *App) startServers() error {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+	a.keepOpen(ln)
+	a.keepOpen(uc)
 	go a.serveTCP(ln)
 	go a.serveUDPEcho(uc)
 	return nil
@@ -165,6 +188,9 @@ func (a *App) serveTCP(ln net.Listener) {
 	for {
 		c, err := ln.Accept()
 		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
 			time.Sleep(50 * time.Millisecond)
 			continue
 		}
@@ -179,6 +205,9 @@ func (a *App) serveUDPEcho(uc *net.UDPConn) {
 	for {
 		n, from, err := uc.ReadFromUDP(buf)
 		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
 			continue
 		}
 		if n < 4 {
@@ -412,11 +441,15 @@ func (a *App) discoveryLoop() {
 		return
 	}
 	a.disc = uc
+	a.keepOpen(uc)
 	go func() {
 		buf := make([]byte, 2048)
 		for {
 			n, from, err := uc.ReadFromUDP(buf)
 			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					return
+				}
 				time.Sleep(100 * time.Millisecond)
 				continue
 			}

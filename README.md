@@ -236,8 +236,8 @@ to flood a third party. Test durations and rates are capped.
 
 - **Windows Defender may flag netproof.exe** as `Trojan:Win32/Bearfoos.A!ml` or similar, mostly
   on Windows 10. This is a machine-learning false positive common to new, unsigned programs.
-  NetProof avoids the usual triggers (the Windows build never starts other programs, no
-  PowerShell, full version information), but only code signing fixes it for good. Until then:
+  NetProof avoids the usual triggers (the Windows build starts no other program except its own
+  updated copy, no command prompt or PowerShell, full version information), but only code signing fixes it for good. Until then:
   Windows Security > Virus & threat protection > Protection history > the NetProof entry >
   Actions > Allow on device, and report each release at
   https://www.microsoft.com/wdsi/filesubmission ("Software developer", "Incorrectly detected").

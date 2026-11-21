@@ -189,6 +189,7 @@ func (a *App) startUI(port int) (string, error) {
 	})
 
 	srv := &http.Server{Handler: guardLocal(mux), ReadHeaderTimeout: 5 * time.Second}
+	a.keepOpen(srv)
 	go func() { _ = srv.Serve(ln) }()
 	return "http://" + ln.Addr().String() + "/", nil
 }
