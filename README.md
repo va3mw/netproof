@@ -15,7 +15,9 @@ suffer from problems an ordinary speed test never shows.
 - [What it measures](#what-it-measures)
 - [How results are judged](#how-results-are-judged)
 - [Features](#features)
+- [Ask an AI](#ask-an-ai)
 - [Versions and updates](#versions-and-updates)
+- [What's new](#whats-new)
 - [Command line](#command-line)
 - [Ports and security](#ports-and-security)
 - [Known issues](#known-issues)
@@ -141,7 +143,8 @@ recognised as a VPN; a gigabit PC paired with one stuck at 100 Mb/s is judged as
 the slow end named as the problem.
 
 The "How to fix it" checklists cover adapters stuck at 100 Mb/s, duplex, packet loss on a wired
-LAN (cables, RF pickup, switches), slow LANs, Wi-Fi, bufferbloat (LAN and internet advice
+LAN (cables, RF pickup, switches), slow LANs, Wi-Fi (adapter power saving, background scans,
+other devices sharing airtime, router channel and DFS settings, mesh backhaul), bufferbloat (LAN and internet advice
 differ), jitter (including raising the radio software's buffer), VPN paths (relays, Tailscale
 DERP), MTU and fragmentation (tunnel MTU, MSS clamping) and UDP blocked by firewalls. They are
 also in the saved and copied text report.
@@ -163,9 +166,25 @@ also in the saved and copied text report.
 - **Copy or save the report** as plain text, for email or a support ticket.
 - **Speed graph with the results**: speed in each direction and the UDP streams over the whole
   test, so dips and drop-outs stay visible after the test ends.
-- **Ask an AI**: opens a window with a ready-made prompt holding the whole report, to paste into
-  ChatGPT, Claude, Gemini or Copilot. It asks the AI to explain the results, ask about your setup
-  and suggest fixes to try and re-test.
+- **Ask an AI**: a ready-made prompt holding the whole report, to paste into an AI assistant (see
+  [Ask an AI](#ask-an-ai)).
+
+## Ask an AI
+
+Below the results, next to **Copy report** and **Save report**, **Ask an AI** opens a window with
+a prompt to paste into ChatGPT, Claude, Gemini, Copilot or another AI assistant:
+
+1. Click **Ask an AI**, then **Copy prompt** in the window that opens.
+2. Paste it into a new chat and send it.
+3. Answer its questions about your setup; it then suggests fixes, and what to re-test with
+   NetProof after each change.
+
+The prompt holds the whole text report and a summary of the speed graph (lowest, average and
+highest speed in each phase, and how much it varied). It asks the AI to explain the results for
+remote radio use, name the likely causes, ask about your router, switches, Wi-Fi or cable, VPN
+and radio software before suggesting fixes, and not to assume numbers that are not in the
+report. The report includes computer names and IP addresses; remove them first if you prefer.
+The computer that was tested has the same button for the results it received.
 
 ## Versions and updates
 
@@ -185,6 +204,9 @@ test runs with the version it has, and the report says why the update did not ha
 - The computer list shows each other computer's NetProof version. When one runs an older version
   that can update itself, an **Update to x.y.z** button next to it updates it right away,
   without running a test.
+- On Windows, the updated copy carries on in the same window (from 1.7.2; a copy updating from
+  1.7.0 or 1.7.1 still opens a new window that one time). On Linux and macOS it replaces itself in
+  place.
 
 **Why this is safe:** a tester cannot send code, only say "update". The other computer installs
 nothing unless the release manifest is signed with the NetProof release key (the public half is
@@ -192,21 +214,37 @@ built into NetProof, the private half is a GitHub Actions secret), the downloade
 SHA-256 in that manifest, and the release is newer than what it runs. A tampered or foreign
 release is refused.
 
-**Publishing a release:** set `appVersion` in `main.go`, regenerate `rsrc_windows_*.syso`, commit,
-and push a tag:
+**Publishing a release:** set `appVersion` in `main.go`, regenerate `rsrc_windows_*.syso` (see
+[Building](#building)), commit, push, and push a tag to **this** repository,
+https://github.com/va3mw/netproof:
 
 ```bash
-git tag v1.7.0
+git tag -a v1.7.4 -m "NetProof 1.7.4"
 ```
 
 ```bash
-git push origin v1.7.0
+git push https://github.com/va3mw/netproof.git main v1.7.4
 ```
 
-The Release workflow tests, builds every platform, signs the manifest and
-publishes the release. The repository must be public so copies of NetProof can download it, and
+The Release workflow tests, builds every platform, signs the manifest and publishes the
+release. Push tags only here: a copy of this repository without the signing key would start the
+same workflow and fail. The repository must be public so copies of NetProof can download it, and
 must have the `NETPROOF_SIGNING_KEY` secret (from `go run ./tools/release keygen`). Keep a backup
 of that key: copies in the field only trust releases signed with it.
+
+## What's new
+
+- **1.7.3**: the speed graph stays with the results (both screens), and the graph now spans all
+  four speed phases. **Ask an AI** opens a ready-made prompt to paste into an AI assistant.
+- **1.7.2**: an **Update** button next to each older computer in the list, with its version shown.
+  On Windows, updates carry on in the same window instead of opening a new one.
+- **1.7.1**: better Wi-Fi advice: adapter power saving, background scans, airtime shared with
+  other devices, router channel and DFS settings, mesh backhaul. Moving closer to the access point
+  is only suggested when the signal is weak.
+- **1.7.0**: versions agree on which tests to run; signed self-update, including updating the far
+  end before a test; macOS app.
+
+Every release, with its files: [Releases](https://github.com/va3mw/netproof/releases).
 
 ## Command line
 
@@ -243,7 +281,8 @@ to flood a third party. Test durations and rates are capped.
 - **Windows Defender may flag netproof.exe** as `Trojan:Win32/Bearfoos.A!ml` or similar, mostly
   on Windows 10. This is a machine-learning false positive common to new, unsigned programs.
   NetProof avoids the usual triggers (the Windows build starts no other program except its own
-  updated copy, no command prompt or PowerShell, full version information), but only code signing fixes it for good. Until then:
+  updated copy, no command prompt or PowerShell, full version information), but only code
+  signing fixes it for good. Until then:
   Windows Security > Virus & threat protection > Protection history > the NetProof entry >
   Actions > Allow on device, and report each release at
   https://www.microsoft.com/wdsi/filesubmission ("Software developer", "Incorrectly detected").
@@ -274,10 +313,10 @@ Runs the tests, including the grading of real recorded results.
 
 Windows version information and the icon are in `rsrc_windows_*.syso`. After changing the
 version in `main.go`, regenerate them with
-[go-winres](https://github.com/tc-hib/go-winres):
+[go-winres](https://github.com/tc-hib/go-winres) (`go run` fetches it, nothing to install):
 
 ```bash
-go-winres simply --arch amd64,arm64 --out rsrc --manifest cli --product-name NetProof --file-description "NetProof network speed and jitter tester" --product-version X.Y.Z.0 --file-version X.Y.Z.0 --original-filename netproof.exe --copyright "Copyright 2026 NetProof" --icon winres/icon.png
+go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64,arm64 --out rsrc --manifest cli --product-name NetProof --file-description "NetProof network speed and jitter tester" --product-version X.Y.Z.0 --file-version X.Y.Z.0 --original-filename netproof.exe --copyright "Copyright 2026 NetProof" --icon winres/icon.png
 ```
 
 ## Project layout
@@ -294,9 +333,12 @@ go-winres simply --arch amd64,arm64 --out rsrc --manifest cli --product-name Net
 | `iface.go`, `linkinfo_*.go` | network connections, link speed, Wi-Fi and VPN detection (macOS: `networksetup` and `ifconfig`) |
 | `tailscale*.go` | Tailscale peers and MagicDNS names |
 | `recent.go` | the "Tested before" list |
-| `ui.go`, `web/index.html` | the browser page |
+| `ui.go`, `web/index.html` | the browser page, including the speed graph |
+| `aiprompt.go`, `web/ai-prompt.html` | the speed samples kept with a result, and the Ask an AI prompt and window |
 | `version.go` | versions and feature negotiation between copies |
 | `update*.go` | signed self-update and updating the far end |
+| `peerupdate.go` | other computers' versions and the Update button in the list |
+| `docs/` | the project page at https://va3mw.github.io/netproof/ |
 | `tools/mkmacapp` | NetProof.app and the universal Mac program |
 | `tools/release` | signing key and signed update manifest |
 | `.github/workflows/release.yml` | builds, signs and publishes a release from a tag |
