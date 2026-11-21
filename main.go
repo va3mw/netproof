@@ -20,8 +20,8 @@ import (
 )
 
 // appVersion is a variable so a build can set it:
-// go build -ldflags "-X main.appVersion=1.7.2"
-var appVersion = "1.7.2"
+// go build -ldflags "-X main.appVersion=1.7.3"
+var appVersion = "1.7.3"
 
 const (
 	appName     = "NetProof"
