@@ -46,6 +46,8 @@ itself up to date (see [Versions and updates](#versions-and-updates)).
 
 ## Quick start
 
+![NetProof: pick the other computer, or one tested before, and click Test](docs/main-screen.png)
+
 1. Run NetProof on **both** computers: `netproof.exe` on Windows, `NetProof.app` on a Mac
    (from `NetProof-mac.zip`), `netproof-linux-amd64` on Debian. A browser page opens by itself.
 2. On **one** of them, click **Test** next to the other computer's name. If it is not listed
